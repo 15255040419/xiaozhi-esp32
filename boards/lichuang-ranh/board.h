@@ -1,0 +1,1 @@
+#define BOARD_NAME "lichuang-ranh" 
