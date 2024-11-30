@@ -44,6 +44,13 @@ elseif(CONFIG_BOARD_TYPE_KEVIN_C3)
     set(BOARD_TYPE "kevin-c3")
 elseif(CONFIG_BOARD_TYPE_LICHUANG_DEV)
     set(BOARD_TYPE "lichuang-dev")
+    list(APPEND SOURCES 
+        "boards/${BOARD_TYPE}/gif/normal_gif.c"
+        "boards/${BOARD_TYPE}/lichuang_dev_board.cc"
+    )
+    list(APPEND INCLUDE_DIRS 
+        "${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_TYPE}/gif"
+    )
 endif()
 file(GLOB BOARD_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_TYPE}/*.cc)
 list(APPEND SOURCES ${BOARD_SOURCES})

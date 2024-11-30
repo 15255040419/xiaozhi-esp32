@@ -21,6 +21,7 @@ private:
     lv_obj_t* content_ = nullptr;
     lv_obj_t* container_ = nullptr;
     lv_obj_t* side_bar_ = nullptr;
+    lv_obj_t* gif_obj_ = nullptr;
 
     void InitializeBacklight(gpio_num_t backlight_pin);
     void SetBacklight(uint8_t brightness);
@@ -34,6 +35,7 @@ public:
                   gpio_num_t backlight_pin, bool backlight_output_invert,
                   int width, int height, bool mirror_x, bool mirror_y, bool swap_xy);
     ~St7789Display();
+    virtual void SetGifAnimation(const lv_img_dsc_t* gif_data) override;
 };
 
 #endif // ST7789_DISPLAY_H
