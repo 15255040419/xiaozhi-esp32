@@ -1,5 +1,6 @@
 #include "st7789_display.h"
 #include "font_awesome_symbols.h"
+#include "../boards/lichuang-dev/gif/normal_gif.h"
 
 #include <esp_log.h>
 #include <esp_err.h>
@@ -174,11 +175,29 @@ void St7789Display::SetupUI() {
     lv_obj_set_style_radius(content_, 0, 0);
     lv_obj_set_width(content_, LV_HOR_RES);
     lv_obj_set_flex_grow(content_, 1);
+    
+    // 设置内容区域的背景色为黑色
+    lv_obj_set_style_bg_color(content_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(content_, LV_OPA_COVER, 0);
 
+    // 隐藏默认表情
     emotion_label_ = lv_label_create(content_);
     lv_obj_set_style_text_font(emotion_label_, &font_awesome_30_1, 0);
     lv_label_set_text(emotion_label_, FONT_AWESOME_AI_CHIP);
     lv_obj_center(emotion_label_);
+    lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
+
+    // 创建 GIF 对象
+    ESP_LOGI(TAG, "Creating GIF object");
+    gif_obj_ = lv_gif_create(content_);
+    if (gif_obj_ != nullptr) {
+        ESP_LOGI(TAG, "Setting GIF source");
+        lv_gif_set_src(gif_obj_, &normal_gif);
+        lv_obj_center(gif_obj_);
+        ESP_LOGI(TAG, "GIF setup complete");
+    } else {
+        ESP_LOGE(TAG, "Failed to create GIF object");
+    }
 
     /* Status bar */
     lv_obj_set_flex_flow(status_bar_, LV_FLEX_FLOW_ROW);
@@ -208,4 +227,10 @@ void St7789Display::SetupUI() {
     battery_label_ = lv_label_create(status_bar_);
     lv_label_set_text(battery_label_, "");
     lv_obj_set_style_text_font(battery_label_, &font_awesome_14_1, 0);
+}
+
+void St7789Display::SetGifAnimation(const lv_img_dsc_t* gif_data) {
+    if (gif_obj_ != nullptr) {
+        lv_gif_set_src(gif_obj_, gif_data);
+    }
 }
