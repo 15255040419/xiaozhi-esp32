@@ -1,6 +1,6 @@
 #include "st7789_display.h"
 #include "font_awesome_symbols.h"
-#include "../boards/lichuang-dev/gif/normal_gif.h"
+#include "../boards/lichuang-dev/gif/close_eys_slow.h"
 
 #include <esp_log.h>
 #include <esp_err.h>
@@ -155,6 +155,10 @@ void St7789Display::SetupUI() {
     auto screen = lv_disp_get_scr_act(disp_);
     lv_obj_set_style_text_font(screen, &font_puhui_14_1, 0);
     lv_obj_set_style_text_color(screen, lv_color_black(), 0);
+    
+    // 设置屏幕背景为黑色
+    lv_obj_set_style_bg_color(screen, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
 
     /* Container */
     container_ = lv_obj_create(screen);
@@ -163,11 +167,13 @@ void St7789Display::SetupUI() {
     lv_obj_set_style_pad_all(container_, 0, 0);
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_pad_row(container_, 0, 0);
+    lv_obj_set_style_bg_opa(container_, LV_OPA_TRANSP, 0);  // 设容器背景透明
 
     /* Status bar */
     status_bar_ = lv_obj_create(container_);
     lv_obj_set_size(status_bar_, LV_HOR_RES, 18);
     lv_obj_set_style_radius(status_bar_, 0, 0);
+    lv_obj_set_style_bg_opa(status_bar_, LV_OPA_TRANSP, 0);  // 设置状态栏背景透明
     
     /* Content */
     content_ = lv_obj_create(container_);
@@ -175,10 +181,7 @@ void St7789Display::SetupUI() {
     lv_obj_set_style_radius(content_, 0, 0);
     lv_obj_set_width(content_, LV_HOR_RES);
     lv_obj_set_flex_grow(content_, 1);
-    
-    // 设置内容区域的背景色为黑色
-    lv_obj_set_style_bg_color(content_, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(content_, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_opa(content_, LV_OPA_TRANSP, 0);  // 设置内容区域背景透明
 
     // 隐藏默认表情
     emotion_label_ = lv_label_create(content_);
@@ -189,11 +192,25 @@ void St7789Display::SetupUI() {
 
     // 创建 GIF 对象
     ESP_LOGI(TAG, "Creating GIF object");
-    gif_obj_ = lv_gif_create(content_);
+    gif_obj_ = lv_gif_create(screen);  // 直接在屏幕上创建，而不是在 content_ 中
     if (gif_obj_ != nullptr) {
         ESP_LOGI(TAG, "Setting GIF source");
-        lv_gif_set_src(gif_obj_, &normal_gif);
+        lv_gif_set_src(gif_obj_, &close_eys_slow);
+        
+        // 设置 GIF 大小为全屏
+        lv_obj_set_size(gif_obj_, LV_HOR_RES, LV_VER_RES);
+        
+        // 完全移除所有边框和边距
+        lv_obj_set_style_border_width(gif_obj_, 0, 0);
+        lv_obj_set_style_border_opa(gif_obj_, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_bg_opa(gif_obj_, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_pad_all(gif_obj_, 0, 0);
+        lv_obj_set_style_radius(gif_obj_, 0, 0);
+        lv_obj_set_style_outline_width(gif_obj_, 0, 0);
+        
+        // 居中显示
         lv_obj_center(gif_obj_);
+        
         ESP_LOGI(TAG, "GIF setup complete");
     } else {
         ESP_LOGE(TAG, "Failed to create GIF object");

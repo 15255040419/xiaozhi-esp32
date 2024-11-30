@@ -42,6 +42,7 @@ elseif(CONFIG_BOARD_TYPE_LICHUANG_DEV)
     set(BOARD_TYPE "lichuang-dev")
     list(APPEND SOURCES 
         "boards/${BOARD_TYPE}/gif/normal_gif.c"
+        "boards/${BOARD_TYPE}/gif/close_eys_slow.c"
         "boards/${BOARD_TYPE}/lichuang_dev_board.cc"
     )
     list(APPEND INCLUDE_DIRS 
