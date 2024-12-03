@@ -181,6 +181,35 @@ St7789Display::St7789Display(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
     SetupUI();
 }
 
+void St7789Display::SetEmotion(const std::string &emotion) {
+    DisplayLockGuard lock(this);
+    if (cozmo_face_) {
+        if (emotion == "happy") {
+            cozmo_face_->setHappy();
+        } else if (emotion == "sad") {
+            cozmo_face_->setSad();
+        } else if (emotion == "angry") {
+            cozmo_face_->setAngry();
+        } else if (emotion == "surprised") {
+            cozmo_face_->setSurprised();
+        } else {
+            cozmo_face_->setNeutral();
+        }
+    }
+}
+
+void St7789Display::DemoAllEmotions() {
+    const std::vector<std::string> emotions = {
+        "neutral", "happy", "sad", "angry", "surprised"
+    };
+    
+    for (const auto& emotion : emotions) {
+        ESP_LOGI(TAG, "Showing emotion: %s", emotion.c_str());
+        SetEmotion(emotion);
+        vTaskDelay(pdMS_TO_TICKS(2000));  // 每个表情显示2秒
+    }
+}
+
 St7789Display::~St7789Display() {
     ESP_ERROR_CHECK(esp_timer_stop(lvgl_tick_timer_));
     ESP_ERROR_CHECK(esp_timer_delete(lvgl_tick_timer_));
@@ -292,10 +321,8 @@ void St7789Display::SetupUI() {
     lv_obj_set_width(content_, LV_HOR_RES);
     lv_obj_set_flex_grow(content_, 1);
 
-    emotion_label_ = lv_label_create(content_);
-    lv_obj_set_style_text_font(emotion_label_, &font_awesome_30_1, 0);
-    lv_label_set_text(emotion_label_, FONT_AWESOME_AI_CHIP);
-    lv_obj_center(emotion_label_);
+    // 创建COZMO表情
+    cozmo_face_ = std::make_unique<CozmoFace>(content_);
 
     /* Status bar */
     lv_obj_set_flex_flow(status_bar_, LV_FLEX_FLOW_ROW);
@@ -325,4 +352,7 @@ void St7789Display::SetupUI() {
     battery_label_ = lv_label_create(status_bar_);
     lv_label_set_text(battery_label_, "");
     lv_obj_set_style_text_font(battery_label_, &font_awesome_14_1, 0);
+
+    // 启动时展示所有表情
+    DemoAllEmotions();
 }

@@ -6,6 +6,7 @@ set(SOURCES "audio_codecs/audio_codec.cc"
             "display/no_display.cc"
             "display/st7789_display.cc"
             "display/ssd1306_display.cc"
+            "display/face/cozmo_face.cc"
             "protocols/protocol.cc"
             "protocols/mqtt_protocol.cc"
             "protocols/websocket_protocol.cc"
@@ -17,7 +18,7 @@ set(SOURCES "audio_codecs/audio_codec.cc"
             "main.cc"
             )
 
-set(INCLUDE_DIRS "." "display" "audio_codecs" "protocols" "audio_processing")
+set(INCLUDE_DIRS "." "display" "display/face" "audio_codecs" "protocols" "audio_processing")
 
 # 字体
 file(GLOB FONT_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/fonts/*.c)
@@ -59,5 +60,5 @@ idf_component_register(SRCS ${SOURCES}
 
 # 使用 target_compile_definitions 来定义 BOARD_TYPE
 target_compile_definitions(${COMPONENT_LIB}
-                    PRIVATE BOARD_TYPE=\"${BOARD_TYPE}\"
+                    PRIVATE BOARD_TYPE="${BOARD_TYPE}"
                     )
