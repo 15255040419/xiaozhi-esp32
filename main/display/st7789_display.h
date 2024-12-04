@@ -2,6 +2,7 @@
 #define ST7789_DISPLAY_H
 
 #include "display.h"
+#include "eyes_animation.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -21,13 +22,13 @@ private:
     bool swap_xy_ = false;
     int offset_x_ = 0;
     int offset_y_ = 0;
+    int width_ = 0;
+    int height_ = 0;
+    
     SemaphoreHandle_t lvgl_mutex_ = nullptr;
     esp_timer_handle_t lvgl_tick_timer_ = nullptr;
     
-    lv_obj_t* status_bar_ = nullptr;
-    lv_obj_t* content_ = nullptr;
-    lv_obj_t* container_ = nullptr;
-    lv_obj_t* side_bar_ = nullptr;
+    std::unique_ptr<EyesAnimation> eyes_animation_;
 
     void InitializeBacklight(gpio_num_t backlight_pin);
     void SetBacklight(uint8_t brightness);
@@ -40,8 +41,11 @@ private:
 public:
     St7789Display(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
                   gpio_num_t backlight_pin, bool backlight_output_invert,
-                  int width, int height,  int offset_x, int offset_y, bool mirror_x, bool mirror_y, bool swap_xy);
+                  int width, int height, int offset_x, int offset_y,
+                  bool mirror_x, bool mirror_y, bool swap_xy);
     ~St7789Display();
+
+    void SetEmotion(EyesAnimation::State state);
 };
 
 #endif // ST7789_DISPLAY_H
