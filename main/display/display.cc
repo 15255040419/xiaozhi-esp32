@@ -188,5 +188,9 @@ void Display::SetIcon(const char* icon) {
     lv_label_set_text(emotion_label_, icon);
 }
 
+void Display::DemoAllEmotions() {
+    // 默认空实现
+}
+
 void Display::SetChatMessage(const std::string &role, const std::string &content) {
 }

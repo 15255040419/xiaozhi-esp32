@@ -68,6 +68,12 @@ void WifiBoard::StartNetwork() {
             vTaskDelay(pdMS_TO_TICKS(10000));
         }
     }
+
+    // WiFi连接成功，清除状态文本并显示表情
+    display->SetStatus("");  // 清除状态文本
+    display->SetEmotion("neutral");  // 显示默认表情
+    vTaskDelay(pdMS_TO_TICKS(1000));  // 等待1秒
+    display->DemoAllEmotions();  // 展示所有表情
 }
 
 void WifiBoard::Initialize() {
