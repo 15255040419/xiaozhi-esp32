@@ -40,7 +40,7 @@ void CozmoFace::createEyes() {
     lv_obj_set_size(left_eye_, EYE_WIDTH, EYE_HEIGHT);
     lv_obj_set_pos(left_eye_, LEFT_EYE_X, EYE_Y);
     lv_obj_set_style_radius(left_eye_, 5, 0);
-    lv_obj_set_style_bg_color(left_eye_, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(left_eye_, lv_color_white(), 0);  // 改为白色
     lv_obj_set_style_bg_opa(left_eye_, LV_OPA_COVER, 0);
     
     // 创建右眼
@@ -49,7 +49,7 @@ void CozmoFace::createEyes() {
     lv_obj_set_size(right_eye_, EYE_WIDTH, EYE_HEIGHT);
     lv_obj_set_pos(right_eye_, RIGHT_EYE_X, EYE_Y);
     lv_obj_set_style_radius(right_eye_, 5, 0);
-    lv_obj_set_style_bg_color(right_eye_, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(right_eye_, lv_color_white(), 0);  // 改为白色
     lv_obj_set_style_bg_opa(right_eye_, LV_OPA_COVER, 0);
 
     setNeutral();

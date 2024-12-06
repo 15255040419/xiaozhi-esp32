@@ -1,5 +1,11 @@
 #include "st7789_display.h"
 #include "font_awesome_symbols.h"
+#include "boards/common/wifi_board.h"
+
+// 声明外部字体
+extern "C" {
+    extern const lv_font_t font_puhui_14_1;
+}
 
 #include <esp_log.h>
 #include <esp_err.h>
@@ -16,8 +22,6 @@
 #define ST7789_LVGL_TASK_PRIORITY 10
 
 LV_FONT_DECLARE(font_puhui_14_1);
-LV_FONT_DECLARE(font_awesome_30_1);
-LV_FONT_DECLARE(font_awesome_14_1);
 
 static lv_disp_drv_t disp_drv;
 static void st7789_lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map)
@@ -119,8 +123,8 @@ St7789Display::St7789Display(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
     
     InitializeBacklight(backlight_pin);
 
-    // draw white
-    std::vector<uint16_t> buffer(width_, 0xFFFF);
+    // draw black
+    std::vector<uint16_t> buffer(width_, 0x0000);
     for (int y = 0; y < height_; y++) {
         esp_lcd_panel_draw_bitmap(panel_, 0, y, width_, y + 1, buffer.data());
     }
@@ -181,32 +185,76 @@ St7789Display::St7789Display(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
     SetupUI();
 }
 
-void St7789Display::SetEmotion(const std::string &emotion) {
+void St7789Display::SetEmotion(const std::string& emotion) {
     DisplayLockGuard lock(this);
-    if (cozmo_face_) {
-        if (emotion == "happy") {
-            cozmo_face_->setHappy();
-        } else if (emotion == "sad") {
-            cozmo_face_->setSad();
-        } else if (emotion == "angry") {
-            cozmo_face_->setAngry();
-        } else if (emotion == "surprised") {
-            cozmo_face_->setSurprised();
-        } else {
-            cozmo_face_->setNeutral();
+    
+    if (!cozmo_face_) {
+        return;
+    }
+
+    // 检查WiFi连接状态
+    auto& wifi_board = WifiBoard::GetInstance();
+    std::string network_name;
+    int signal_quality;
+    std::string signal_quality_text;
+    bool is_connected = wifi_board.GetNetworkState(network_name, signal_quality, signal_quality_text);
+    
+    if (!is_connected) {
+        cozmo_face_->hide();
+        if (status_label_) {
+            lv_obj_clear_flag(status_label_, LV_OBJ_FLAG_HIDDEN);  // 显示状态文本
         }
+        return;
+    }
+
+    // WiFi已连接，显示表情
+    if (status_label_) {
+        lv_obj_add_flag(status_label_, LV_OBJ_FLAG_HIDDEN);  // 隐藏状态文本
+    }
+    cozmo_face_->show();
+    
+    if (emotion == "neutral") {
+        cozmo_face_->setNeutral();
+    } else if (emotion == "happy") {
+        cozmo_face_->setHappy();
+    } else if (emotion == "sad") {
+        cozmo_face_->setSad();
+    } else if (emotion == "angry") {
+        cozmo_face_->setAngry();
+    } else if (emotion == "surprised") {
+        cozmo_face_->setSurprised();
     }
 }
 
 void St7789Display::DemoAllEmotions() {
+    DisplayLockGuard lock(this);
+    
+    if (!cozmo_face_) {
+        return;
+    }
+
+    // 检查WiFi连接状态
+    auto& wifi_board = WifiBoard::GetInstance();
+    std::string network_name;
+    int signal_quality;
+    std::string signal_quality_text;
+    bool is_connected = wifi_board.GetNetworkState(network_name, signal_quality, signal_quality_text);
+    
+    if (!is_connected) {
+        cozmo_face_->hide();
+        return;
+    }
+
+    // WiFi已连接，展示所有表情
+    cozmo_face_->show();
+    
     const std::vector<std::string> emotions = {
         "neutral", "happy", "sad", "angry", "surprised"
     };
-    
+
     for (const auto& emotion : emotions) {
-        ESP_LOGI(TAG, "Showing emotion: %s", emotion.c_str());
         SetEmotion(emotion);
-        vTaskDelay(pdMS_TO_TICKS(2000));  // 每个表情显示2秒
+        vTaskDelay(pdMS_TO_TICKS(1000));  // 每个表情显示1秒
     }
 }
 
@@ -298,8 +346,11 @@ void St7789Display::SetupUI() {
     DisplayLockGuard lock(this);
 
     auto screen = lv_disp_get_scr_act(lv_disp_get_default());
-    lv_obj_set_style_text_font(screen, &font_puhui_14_1, 0);
-    lv_obj_set_style_text_color(screen, lv_color_black(), 0);
+    lv_obj_set_style_text_font(screen, &font_puhui_14_1, 0);  // 使用 font_puhui_14_1 字体
+    lv_obj_set_style_text_color(screen, lv_color_white(), 0);
+    lv_obj_set_style_bg_color(screen, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+    lv_obj_set_style_pad_all(screen, 0, 0);  // 移除屏幕边距
 
     /* Container */
     container_ = lv_obj_create(screen);
@@ -308,51 +359,48 @@ void St7789Display::SetupUI() {
     lv_obj_set_style_pad_all(container_, 0, 0);
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_pad_row(container_, 0, 0);
+    lv_obj_set_style_bg_color(container_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(container_, LV_OPA_COVER, 0);
+    lv_obj_set_pos(container_, 0, 0);  // 确保容器从(0,0)开始
 
-    /* Status bar */
-    status_bar_ = lv_obj_create(container_);
-    lv_obj_set_size(status_bar_, LV_HOR_RES, 18);
-    lv_obj_set_style_radius(status_bar_, 0, 0);
-    
     /* Content */
     content_ = lv_obj_create(container_);
     lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_radius(content_, 0, 0);
-    lv_obj_set_width(content_, LV_HOR_RES);
-    lv_obj_set_flex_grow(content_, 1);
+    lv_obj_set_size(content_, LV_HOR_RES, LV_VER_RES);  // 设置为全屏
+    lv_obj_set_style_pad_all(content_, 0, 0);  // 移除内容区域边距
+    lv_obj_set_style_border_width(content_, 0, 0);  // 移除边框
+    lv_obj_set_style_bg_color(content_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(content_, LV_OPA_COVER, 0);
+    lv_obj_set_pos(content_, 0, 0);  // 确保内容从(0,0)开始
 
-    // 创建COZMO表情
-    cozmo_face_ = std::make_unique<CozmoFace>(content_);
-
-    /* Status bar */
-    lv_obj_set_flex_flow(status_bar_, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_all(status_bar_, 0, 0);
-    lv_obj_set_style_border_width(status_bar_, 0, 0);
-    lv_obj_set_style_pad_column(status_bar_, 0, 0);
-
-    network_label_ = lv_label_create(status_bar_);
-    lv_label_set_text(network_label_, "");
-    lv_obj_set_style_text_font(network_label_, &font_awesome_14_1, 0);
-
-    notification_label_ = lv_label_create(status_bar_);
-    lv_obj_set_flex_grow(notification_label_, 1);
-    lv_obj_set_style_text_align(notification_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(notification_label_, "通知");
-    lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
-
-    status_label_ = lv_label_create(status_bar_);
-    lv_obj_set_flex_grow(status_label_, 1);
-    lv_label_set_text(status_label_, "正在初始化");
+    // 创建状态文本标签
+    status_label_ = lv_label_create(content_);
+    lv_obj_center(status_label_);
+    lv_obj_set_style_text_font(status_label_, &font_puhui_14_1, 0);  // 使用 font_puhui_14_1 字体
+    lv_obj_set_style_text_color(status_label_, lv_color_white(), 0);
+    lv_label_set_text(status_label_, "正在连接WiFi...");  // 更新初始状态文本
     lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_pad_all(status_label_, 0, 0);  // 移除标签边距
+    lv_label_set_long_mode(status_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_width(status_label_, LV_HOR_RES);  // 使用全屏宽度
+    lv_obj_clear_flag(status_label_, LV_OBJ_FLAG_HIDDEN);  // 确保状态文本是可见的
 
-    mute_label_ = lv_label_create(status_bar_);
-    lv_label_set_text(mute_label_, "");
-    lv_obj_set_style_text_font(mute_label_, &font_awesome_14_1, 0);
+    // 创建COZMO表情并设置为全屏
+    cozmo_face_ = std::make_unique<CozmoFace>(content_);
+    if (cozmo_face_) {
+        // 设置眼睛大小和位置
+        int eye_width = LV_HOR_RES / 4;  // 眼睛宽度为屏幕宽度的1/4
+        int eye_height = eye_width * 2/3;  // 眼睛高度为宽度的2/3
+        cozmo_face_->setEyeSize(eye_width, eye_height);
 
-    battery_label_ = lv_label_create(status_bar_);
-    lv_label_set_text(battery_label_, "");
-    lv_obj_set_style_text_font(battery_label_, &font_awesome_14_1, 0);
+        // 计算眼睛位置
+        int eye_spacing = eye_width / 2;  // 眼睛之间的间距
+        int left_x = (LV_HOR_RES - (2 * eye_width + eye_spacing)) / 2;  // 左眼X坐标
+        int right_x = left_x + eye_width + eye_spacing;  // 右眼X坐标
+        int y = (LV_VER_RES - eye_height) / 2;  // 垂直居中
+        cozmo_face_->setEyePositions(left_x, right_x, y);
 
-    // 启动时展示所有表情
-    DemoAllEmotions();
+        cozmo_face_->hide();  // 初始时隐藏表情
+    }
 }
