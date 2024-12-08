@@ -2,6 +2,7 @@
 #define ST7789_DISPLAY_H
 
 #include "display.h"
+#include "face_display.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -28,11 +29,13 @@ private:
     lv_obj_t* content_ = nullptr;
     lv_obj_t* container_ = nullptr;
     lv_obj_t* side_bar_ = nullptr;
+    FaceDisplay* face_display_ = nullptr;
 
     void InitializeBacklight(gpio_num_t backlight_pin);
     void SetBacklight(uint8_t brightness);
     void SetupUI();
     void LvglTask();
+    static void expression_demo_task(void* arg);  // 新增表情演示任务
 
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
@@ -42,6 +45,10 @@ public:
                   gpio_num_t backlight_pin, bool backlight_output_invert,
                   int width, int height,  int offset_x, int offset_y, bool mirror_x, bool mirror_y, bool swap_xy);
     ~St7789Display();
+    
+    // 表情控制接口
+    void SetFaceExpression(Expression exp);
+    void DoBlink();
 };
 
 #endif // ST7789_DISPLAY_H

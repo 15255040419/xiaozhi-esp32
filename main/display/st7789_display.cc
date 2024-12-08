@@ -1,10 +1,13 @@
 #include "st7789_display.h"
 #include "font_awesome_symbols.h"
+#include "esp_random.h"
 
 #include <esp_log.h>
 #include <esp_err.h>
 #include <driver/ledc.h>
 #include <vector>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #define TAG "St7789Display"
 #define LCD_LEDC_CH LEDC_CHANNEL_0
@@ -14,6 +17,8 @@
 #define ST7789_LVGL_TASK_MIN_DELAY_MS 1
 #define ST7789_LVGL_TASK_STACK_SIZE (4 * 1024)
 #define ST7789_LVGL_TASK_PRIORITY 10
+
+#define EXPRESSION_CHANGE_INTERVAL 2000
 
 LV_FONT_DECLARE(font_puhui_14_1);
 LV_FONT_DECLARE(font_awesome_30_1);
@@ -82,9 +87,13 @@ static void st7789_lvgl_port_update_callback(lv_disp_drv_t *drv)
     }
 }
 
+static constexpr lv_style_selector_t GetStyleSelector() {
+    return static_cast<lv_style_selector_t>(static_cast<uint32_t>(LV_PART_MAIN) | static_cast<uint32_t>(LV_STATE_DEFAULT));
+}
+
 void St7789Display::LvglTask() {
     ESP_LOGI(TAG, "Starting LVGL task");
-    uint32_t task_delay_ms = ST7789_LVGL_TASK_MAX_DELAY_MS;
+    uint32_t task_delay_ms = LV_DISP_DEF_REFR_PERIOD;  // Use refresh period from lv_conf.h
     while (1)
     {
         // Lock the mutex due to the LVGL APIs are not thread-safe
@@ -93,13 +102,10 @@ void St7789Display::LvglTask() {
             task_delay_ms = lv_timer_handler();
             Unlock();
         }
-        if (task_delay_ms > ST7789_LVGL_TASK_MAX_DELAY_MS)
+        // Ensure we don't delay longer than our configured refresh period
+        if (task_delay_ms > LV_DISP_DEF_REFR_PERIOD)
         {
-            task_delay_ms = ST7789_LVGL_TASK_MAX_DELAY_MS;
-        }
-        else if (task_delay_ms < ST7789_LVGL_TASK_MIN_DELAY_MS)
-        {
-            task_delay_ms = ST7789_LVGL_TASK_MIN_DELAY_MS;
+            task_delay_ms = LV_DISP_DEF_REFR_PERIOD;
         }
         vTaskDelay(pdMS_TO_TICKS(task_delay_ms));
     }
@@ -119,8 +125,8 @@ St7789Display::St7789Display(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
     
     InitializeBacklight(backlight_pin);
 
-    // draw white
-    std::vector<uint16_t> buffer(width_, 0xFFFF);
+    // draw black
+    std::vector<uint16_t> buffer(width_, 0x0000);
     for (int y = 0; y < height_; y++) {
         esp_lcd_panel_draw_bitmap(panel_, 0, y, width_, y + 1, buffer.data());
     }
@@ -133,13 +139,13 @@ St7789Display::St7789Display(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
     lv_init();
     // alloc draw buffers used by LVGL
     static lv_disp_draw_buf_t disp_buf; // contains internal graphic buffer(s) called draw buffer(s)
-    // it's recommended to choose the size of the draw buffer(s) to be at least 1/10 screen sized
-    lv_color_t *buf1 = (lv_color_t *)heap_caps_malloc(width_ * 10 * sizeof(lv_color_t), MALLOC_CAP_DMA);
+    // Use canvas size buffer as defined in lv_conf.h
+    lv_color_t *buf1 = (lv_color_t *)heap_caps_malloc(LV_DISP_DRAW_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     assert(buf1);
-    lv_color_t *buf2 = (lv_color_t *)heap_caps_malloc(width_ * 10 * sizeof(lv_color_t), MALLOC_CAP_DMA);
+    lv_color_t *buf2 = (lv_color_t *)heap_caps_malloc(LV_DISP_DRAW_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     assert(buf2);
-    // initialize LVGL draw buffers
-    lv_disp_draw_buf_init(&disp_buf, buf1, buf2, width_ * 10);
+    // initialize LVGL draw buffers with canvas size
+    lv_disp_draw_buf_init(&disp_buf, buf1, buf2, LV_DISP_DRAW_BUF_SIZE);
 
     ESP_LOGI(TAG, "Register display driver to LVGL");
     lv_disp_drv_init(&disp_drv);
@@ -151,6 +157,8 @@ St7789Display::St7789Display(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
     disp_drv.drv_update_cb = st7789_lvgl_port_update_callback;
     disp_drv.draw_buf = &disp_buf;
     disp_drv.user_data = panel_;
+    disp_drv.dpi = 240;  // 设置适当的DPI值
+    disp_drv.direct_mode = 1;  // 启用直接模式以提高性能
 
     lv_disp_drv_register(&disp_drv);
 
@@ -178,7 +186,13 @@ St7789Display::St7789Display(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
 
     SetBacklight(100);
 
+    // Set default screen background to black
+    lv_obj_set_style_bg_color(lv_scr_act(), lv_color_black(), GetStyleSelector());
+    lv_obj_set_style_bg_opa(lv_scr_act(), LV_OPA_COVER, GetStyleSelector());
+
     SetupUI();
+
+    xTaskCreate(expression_demo_task, "expression_demo", 4096, this, 5, NULL);
 }
 
 St7789Display::~St7789Display() {
@@ -268,61 +282,114 @@ void St7789Display::Unlock() {
 void St7789Display::SetupUI() {
     DisplayLockGuard lock(this);
 
-    auto screen = lv_disp_get_scr_act(lv_disp_get_default());
-    lv_obj_set_style_text_font(screen, &font_puhui_14_1, 0);
-    lv_obj_set_style_text_color(screen, lv_color_black(), 0);
+    // Set screen background color to black
+    lv_obj_set_style_bg_color(lv_scr_act(), lv_color_black(), GetStyleSelector());
+    lv_obj_set_style_bg_opa(lv_scr_act(), LV_OPA_COVER, GetStyleSelector());
 
-    /* Container */
-    container_ = lv_obj_create(screen);
-    lv_obj_set_size(container_, LV_HOR_RES, LV_VER_RES);
-    lv_obj_set_flex_flow(container_, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(container_, 0, 0);
-    lv_obj_set_style_border_width(container_, 0, 0);
-    lv_obj_set_style_pad_row(container_, 0, 0);
+    // Create status bar with black background
+    status_bar_ = lv_obj_create(lv_scr_act());
+    lv_obj_remove_style_all(status_bar_);
+    lv_obj_set_size(status_bar_, width_, 20);
+    lv_obj_align(status_bar_, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_style_bg_color(status_bar_, lv_color_black(), GetStyleSelector());
+    lv_obj_set_style_bg_opa(status_bar_, LV_OPA_COVER, GetStyleSelector());
+    lv_obj_clear_flag(status_bar_, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Status bar */
-    status_bar_ = lv_obj_create(container_);
-    lv_obj_set_size(status_bar_, LV_HOR_RES, 18);
-    lv_obj_set_style_radius(status_bar_, 0, 0);
-    
-    /* Content */
-    content_ = lv_obj_create(container_);
-    lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_style_radius(content_, 0, 0);
-    lv_obj_set_width(content_, LV_HOR_RES);
-    lv_obj_set_flex_grow(content_, 1);
+    // Create status label with white text
+    status_label_ = lv_label_create(status_bar_);
+    lv_obj_set_style_text_color(status_label_, lv_color_white(), GetStyleSelector());
+    lv_label_set_text(status_label_, "");
+    lv_obj_align(status_label_, LV_ALIGN_LEFT_MID, 0, 0);
 
-    emotion_label_ = lv_label_create(content_);
-    lv_obj_set_style_text_font(emotion_label_, &font_awesome_30_1, 0);
-    lv_label_set_text(emotion_label_, FONT_AWESOME_AI_CHIP);
-    lv_obj_center(emotion_label_);
-
-    /* Status bar */
-    lv_obj_set_flex_flow(status_bar_, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_all(status_bar_, 0, 0);
-    lv_obj_set_style_border_width(status_bar_, 0, 0);
-    lv_obj_set_style_pad_column(status_bar_, 0, 0);
-
-    network_label_ = lv_label_create(status_bar_);
-    lv_label_set_text(network_label_, "");
-    lv_obj_set_style_text_font(network_label_, &font_awesome_14_1, 0);
-
+    // Create notification label with white text
     notification_label_ = lv_label_create(status_bar_);
-    lv_obj_set_flex_grow(notification_label_, 1);
-    lv_obj_set_style_text_align(notification_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(notification_label_, "通知");
+    lv_obj_set_style_text_color(notification_label_, lv_color_white(), GetStyleSelector());
+    lv_label_set_text(notification_label_, "");
+    lv_obj_align(notification_label_, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
 
-    status_label_ = lv_label_create(status_bar_);
-    lv_obj_set_flex_grow(status_label_, 1);
-    lv_label_set_text(status_label_, "正在初始化");
-    lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_CENTER, 0);
-
-    mute_label_ = lv_label_create(status_bar_);
-    lv_label_set_text(mute_label_, "");
-    lv_obj_set_style_text_font(mute_label_, &font_awesome_14_1, 0);
-
+    // Create battery label with white text
     battery_label_ = lv_label_create(status_bar_);
+    lv_obj_set_style_text_color(battery_label_, lv_color_white(), GetStyleSelector());
     lv_label_set_text(battery_label_, "");
-    lv_obj_set_style_text_font(battery_label_, &font_awesome_14_1, 0);
+    lv_obj_align(battery_label_, LV_ALIGN_RIGHT_MID, 0, 0);
+
+    // Create network label with white text
+    network_label_ = lv_label_create(status_bar_);
+    lv_obj_set_style_text_color(network_label_, lv_color_white(), GetStyleSelector());
+    lv_label_set_text(network_label_, "");
+    lv_obj_align(network_label_, LV_ALIGN_RIGHT_MID, -20, 0);
+
+    // Create mute label with white text
+    mute_label_ = lv_label_create(status_bar_);
+    lv_obj_set_style_text_color(mute_label_, lv_color_white(), GetStyleSelector());
+    lv_label_set_text(mute_label_, "");
+    lv_obj_align(mute_label_, LV_ALIGN_RIGHT_MID, -40, 0);
+
+    // Create face display with white color
+    face_display_ = new FaceDisplay(lv_scr_act(), width_, height_ - 20);  // 减去状态栏高度
+    face_display_->setExpression(Expression::Normal);
+}
+
+void St7789Display::SetFaceExpression(Expression exp) {
+    if (face_display_) {
+        face_display_->setExpression(exp);
+    }
+}
+
+void St7789Display::DoBlink() {
+    if (face_display_) {
+        face_display_->doBlink();
+    }
+}
+
+void St7789Display::expression_demo_task(void* arg) {
+    St7789Display* display = static_cast<St7789Display*>(arg);
+    
+    const Expression expressions[] = {
+        Expression::Normal,
+        Expression::Happy,
+        Expression::Sad,
+        Expression::Angry,
+        Expression::Surprised,
+        Expression::Sleepy,
+        Expression::Glee,
+        Expression::Worried,
+        Expression::Focused,
+        Expression::Annoyed,
+        Expression::Skeptic,
+        Expression::Frustrated,
+        Expression::Unimpressed,
+        Expression::Suspicious,
+        Expression::Squint,
+        Expression::Furious,
+        Expression::Scared,
+        Expression::Awe,
+        Expression::LookLeft,
+        Expression::LookRight
+    };
+    
+    const int total_expressions = sizeof(expressions) / sizeof(expressions[0]);
+    int current_index = 0;
+    
+    while (true) {
+        if (display->face_display_) {
+            // 设置当前表情
+            display->face_display_->setExpression(expressions[current_index]);
+            
+            // 等待3秒
+            vTaskDelay(pdMS_TO_TICKS(3000));
+            
+            // 随机触发眨眼
+            if (esp_random() % 3 == 0) {  // 1/3的概率眨眼
+                display->face_display_->doBlink();
+                vTaskDelay(pdMS_TO_TICKS(100));  // 等待眨眼动画完成
+            }
+            
+            // 移动到下一个表情
+            current_index = (current_index + 1) % total_expressions;
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(100));  // 防止看门狗超时
+    }
 }
