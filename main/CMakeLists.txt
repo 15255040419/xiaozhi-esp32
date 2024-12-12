@@ -52,6 +52,8 @@ elseif(CONFIG_BOARD_TYPE_LICHUANG_DEV)
     set(BOARD_TYPE "lichuang-dev")
 elseif(CONFIG_BOARD_TYPE_TERRENCE_C3_DEV)
     set(BOARD_TYPE "terrence-c3-dev")
+elseif(CONFIG_BOARD_TYPE_NOMI)
+    set(BOARD_TYPE "nomi")
 endif()
 file(GLOB BOARD_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_TYPE}/*.cc)
 list(APPEND SOURCES ${BOARD_SOURCES})
@@ -63,6 +65,7 @@ endif()
 idf_component_register(SRCS ${SOURCES}
                     EMBED_FILES "assets/err_reg.p3" "assets/err_pin.p3" "assets/err_wificonfig.p3"
                     INCLUDE_DIRS ${INCLUDE_DIRS}
+                    REQUIRES fatfs vfs driver lvgl esp_lvgl_port esp-opus esp-opus-encoder app_update esp_http_client esp_app_format esp_partition esp_system
                     WHOLE_ARCHIVE
                     )
 
