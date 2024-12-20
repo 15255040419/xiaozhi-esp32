@@ -7,7 +7,7 @@
 #include "led.h"
 #include "config.h"
 #include "iot/thing_manager.h"
-#include "sd_card.h"
+#include "tf_card.h"
 #include "application.h"
 #include "wifi_station.h"
 
@@ -30,7 +30,8 @@ private:
     SystemReset system_reset_;
     Ap5056* ap5056_;
     esp_timer_handle_t power_save_timer_;
-    SdCard sd_card_;
+    TfCard tf_card_;
+    static St7789Display* display_;
 
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
@@ -82,19 +83,18 @@ private:
         }
     }
 
-    void InitializeSpiAndSd() {
+    void InitializeSpiAndTf() {
         spi_bus_config_t bus_cfg = {
-            .mosi_io_num = TFT_MOSI_PIN,
-            .miso_io_num = TFT_MISO_PIN,
-            .sclk_io_num = TFT_SCK_PIN,
+            .mosi_io_num = TF_MOSI_PIN,
+            .miso_io_num = TF_MISO_PIN,
+            .sclk_io_num = TF_SCK_PIN,
             .quadwp_io_num = -1,
             .quadhd_io_num = -1,
             .max_transfer_sz = DISPLAY_WIDTH * DISPLAY_HEIGHT * 2,
         };
         ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &bus_cfg, SPI_DMA_CH_AUTO));
         
-        // TFT和SD卡会共用这个SPI总线
-        // 在初始化Display和SD卡时使用相同的SPI_HOST
+        // TF卡会共用这个SPI总线
     }
 
 public:
@@ -102,18 +102,18 @@ public:
         boot_button_(BOOT_BUTTON_GPIO),
         system_reset_(RESET_BUTTON_GPIO, GPIO_NUM_NC) {
         
-        InitializeSpiAndSd();  // 先初始化SPI总线
+        InitializeSpiAndTf();  // 先初始化SPI总线
         InitializeButtons();
         InitializeIot();
         InitializePowerManagement();
 
-        // 初始化SD卡
-        sd_card_.Initialize();
+        // 初始化TF卡
+        tf_card_.Initialize();
 
         // 如果有卡检测引脚，配置它
-        if (SD_DETECT_PIN != GPIO_NUM_NC) {
+        if (TF_DETECT_PIN != GPIO_NUM_NC) {
             gpio_config_t io_conf = {
-                .pin_bit_mask = (1ULL << SD_DETECT_PIN),
+                .pin_bit_mask = (1ULL << TF_DETECT_PIN),
                 .mode = GPIO_MODE_INPUT,
                 .pull_up_en = GPIO_PULLUP_ENABLE,
                 .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -144,50 +144,48 @@ public:
     }
 
     virtual Display* GetDisplay() override {
-        static St7789Display* display = nullptr;
-        if (display == nullptr) {
-            esp_lcd_panel_io_handle_t panel_io = nullptr;
-            esp_lcd_panel_handle_t panel = nullptr;
+        if (display_ == nullptr) {
+            spi_bus_config_t buscfg = {
+                .mosi_io_num = DISPLAY_SDA_PIN,
+                .miso_io_num = GPIO_NUM_NC,
+                .sclk_io_num = DISPLAY_SCL_PIN,
+                .quadwp_io_num = GPIO_NUM_NC,
+                .quadhd_io_num = GPIO_NUM_NC,
+                .max_transfer_sz = DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t)
+            };
+            ESP_ERROR_CHECK(spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO));
 
+            esp_lcd_panel_io_handle_t io_handle = nullptr;
             esp_lcd_panel_io_spi_config_t io_config = {
                 .cs_gpio_num = DISPLAY_CS_PIN,
                 .dc_gpio_num = DISPLAY_RS_PIN,
-                .spi_mode = 0,
+                .spi_mode = LCD_SPI_MODE,
                 .pclk_hz = LCD_PIXEL_CLOCK_HZ,
                 .trans_queue_depth = 10,
-                .on_color_trans_done = nullptr,
-                .user_ctx = nullptr,
                 .lcd_cmd_bits = LCD_CMD_BITS,
                 .lcd_param_bits = LCD_PARAM_BITS,
-                .flags = {
-                    .dc_low_on_data = 0,
-                    .octal_mode = 0,
-                    .sio_mode = 0,
-                    .lsb_first = 0,
-                    .cs_high_active = 0
-                }
             };
+            ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI3_HOST, &io_config, &io_handle));
 
-            ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)SPI2_HOST, &io_config, &panel_io));
-
+            esp_lcd_panel_handle_t panel_handle = nullptr;
             esp_lcd_panel_dev_config_t panel_config = {
                 .reset_gpio_num = DISPLAY_RST_PIN,
-                .rgb_endian = LCD_RGB_ELEMENT_ORDER_RGB,
+                .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
                 .bits_per_pixel = 16,
-                .flags = {
-                    .reset_active_high = 0
-                }
             };
+            ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(io_handle, &panel_config, &panel_handle));
 
-            ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(panel_io, &panel_config, &panel));
-            
-            display = new St7789Display(panel_io, panel,
-                DISPLAY_BLK_PIN, DISPLAY_BACKLIGHT_OUTPUT_INVERT,
-                DISPLAY_WIDTH, DISPLAY_HEIGHT,
-                DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y,
+            esp_lcd_panel_reset(panel_handle);
+            esp_lcd_panel_init(panel_handle);
+            esp_lcd_panel_invert_color(panel_handle, true);
+            esp_lcd_panel_swap_xy(panel_handle, DISPLAY_SWAP_XY);
+            esp_lcd_panel_mirror(panel_handle, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
+
+            display_ = new St7789Display(io_handle, panel_handle, DISPLAY_BLK_PIN, DISPLAY_BACKLIGHT_OUTPUT_INVERT,
+                DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y,
                 DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
         }
-        return display;
+        return display_;
     }
 
     virtual bool GetBatteryLevel(int &level, bool& charging) override {
@@ -200,20 +198,22 @@ public:
     }
 
     bool LoadGifFile(const char* filename, uint8_t** data, size_t* size) {
-        return sd_card_.ReadFile(filename, data, size);
+        return tf_card_.ReadFile(filename, data, size);
     }
 
     bool GetFileList(const char* dir_path, std::vector<std::string>& files) {
-        return sd_card_.ListFiles(dir_path, files);
+        return tf_card_.ListFiles(dir_path, files);
     }
 
     bool SaveFile(const char* filename, const uint8_t* data, size_t size) {
-        return sd_card_.WriteFile(filename, data, size);
+        return tf_card_.WriteFile(filename, data, size);
     }
 
-    bool IsSdCardReady() const {
-        return sd_card_.IsMounted();
+    bool IsTfCardReady() const {
+        return tf_card_.IsMounted();
     }
 };
+
+St7789Display* NomiBoard::display_ = nullptr;
 
 DECLARE_BOARD(NomiBoard); 

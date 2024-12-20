@@ -20,9 +20,15 @@
 // 显示屏配置
 #define DISPLAY_WIDTH   320          // 横屏宽度
 #define DISPLAY_HEIGHT  240          // 横屏高度
-#define DISPLAY_MIRROR_X false
-#define DISPLAY_MIRROR_Y false
+#define DISPLAY_MIRROR_X true       // 左右镜像
+#define DISPLAY_MIRROR_Y true       // 上下镜像
 #define DISPLAY_SWAP_XY  true       // 需要交换XY以支持横屏
+
+// LCD时序配置
+#define LCD_PIXEL_CLOCK_HZ  (80 * 1000 * 1000)  // 80MHz
+#define LCD_CMD_BITS        8
+#define LCD_PARAM_BITS      8
+#define LCD_SPI_MODE        0       // SPI模式0
 
 // 显示屏引脚
 #define DISPLAY_RS_PIN      GPIO_NUM_17   // DC
@@ -33,14 +39,19 @@
 #define DISPLAY_BLK_PIN     GPIO_NUM_42   // LEDK
 
 // 显示屏特殊配置
-#define DISPLAY_BACKLIGHT_OUTPUT_INVERT false  // 背光控制不需要反转（高电平点亮）
+#define DISPLAY_BACKLIGHT_OUTPUT_INVERT false   // 背光控制需要反转（高电平点亮）
 #define DISPLAY_OFFSET_X  0
 #define DISPLAY_OFFSET_Y  0
 
-// TFT卡模块 (SPI接口)
-#define TFT_MOSI_PIN       GPIO_NUM_47   // CMD
-#define TFT_MISO_PIN       GPIO_NUM_48   // DAT0
-#define TFT_SCK_PIN        GPIO_NUM_19   // CLK
+// TF卡模块引脚定义
+#define TF_MOSI_PIN       GPIO_NUM_47   // CMD (Pin 3)
+#define TF_MISO_PIN       GPIO_NUM_48   // DAT0 (Pin 7)
+#define TF_SCK_PIN        GPIO_NUM_19   // CLK (Pin 5)
+#define TF_CS_PIN         GPIO_NUM_NC   // 不需要 CS 引脚
+#define TF_DETECT_PIN     GPIO_NUM_NC   // 不使用检测引脚
+
+// TF卡挂载点
+#define TF_MOUNT_POINT    "/sdcard"
 
 // 按键配置
 #define BOOT_BUTTON_GPIO    GPIO_NUM_0
@@ -49,19 +60,7 @@
 // 电池管理
 #define BAT_DETECT_PIN     GPIO_NUM_8
 
-// 添加以下定义
-#define BUILTIN_LED_GPIO        GPIO_NUM_48
+// LED配置
+#define BUILTIN_LED_GPIO        GPIO_NUM_18  // 改为使用 GPIO18
 
-// SD卡配置 (SPI模式)
-#define SD_MOSI_PIN       TFT_MOSI_PIN
-#define SD_MISO_PIN       TFT_MISO_PIN
-#define SD_SCK_PIN        TFT_SCK_PIN
-#define SD_MOUNT_POINT    "/sdcard"     // 挂载点
-#define SD_DETECT_PIN     GPIO_NUM_NC   // 如果不使用检测引脚
-
-// LCD配置
-#define LCD_PIXEL_CLOCK_HZ  (40 * 1000 * 1000)
-#define LCD_CMD_BITS        8
-#define LCD_PARAM_BITS      8
-
-#endif // _BOARD_CONFIG_H_ 
+#endif // _BOARD_CONFIG_H_

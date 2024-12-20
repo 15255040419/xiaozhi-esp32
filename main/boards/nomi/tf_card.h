@@ -2,25 +2,22 @@
 
 #include <string>
 #include <vector>
-#include "driver/sdspi_host.h"
-#include "driver/gpio.h"
-#include "esp_vfs_fat.h"
+#include "sdmmc_cmd.h"
 
-class SdCard {
+class TfCard {
 public:
-    SdCard();
-    ~SdCard();
+    TfCard() : mounted_(false), card_(nullptr) {}
+    ~TfCard();
 
     bool Initialize();
     void Unmount();
-    bool IsMounted() const { return mounted_; }
     void CheckStatus();
-    
-    bool ReadFile(const char* filename, uint8_t** data, size_t* size);
+    bool ReadFile(const char* path, uint8_t** data, size_t* size);
     bool WriteFile(const char* filename, const uint8_t* data, size_t size);
     bool ListFiles(const char* dir_path, std::vector<std::string>& files);
+    bool IsMounted() const { return mounted_; }
 
 private:
     bool mounted_;
     sdmmc_card_t* card_;
-}; 
+};
