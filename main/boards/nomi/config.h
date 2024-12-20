@@ -9,20 +9,21 @@
 #define AUDIO_I2S_METHOD_SIMPLEX
 
 #ifdef AUDIO_I2S_METHOD_SIMPLEX
-#define AUDIO_I2S_MIC_GPIO_WS   GPIO_NUM_4
-#define AUDIO_I2S_MIC_GPIO_SCK  GPIO_NUM_5
-#define AUDIO_I2S_MIC_GPIO_DIN  GPIO_NUM_6
-#define AUDIO_I2S_SPK_GPIO_DOUT GPIO_NUM_7
-#define AUDIO_I2S_SPK_GPIO_BCLK GPIO_NUM_15
-#define AUDIO_I2S_SPK_GPIO_LRCK GPIO_NUM_16
+#define AUDIO_I2S_MIC_GPIO_WS   GPIO_NUM_4    // MSM261 WS
+#define AUDIO_I2S_MIC_GPIO_SCK  GPIO_NUM_5    // MSM261 SCK
+#define AUDIO_I2S_MIC_GPIO_DIN  GPIO_NUM_6    // MSM261 SD
+#define AUDIO_I2S_SPK_GPIO_DOUT GPIO_NUM_7    // MAX98357 DIN
+#define AUDIO_I2S_SPK_GPIO_BCLK GPIO_NUM_15   // MAX98357 BCLK
+#define AUDIO_I2S_SPK_GPIO_LRCK GPIO_NUM_16   // MAX98357 LRCLK
+// MAX98357的SD_MODE#已经在硬件上接地，不需要软件控制
 #endif
 
 // 显示屏配置
 #define DISPLAY_WIDTH   320          // 横屏宽度
 #define DISPLAY_HEIGHT  240          // 横屏高度
 #define DISPLAY_MIRROR_X true       // 左右镜像
-#define DISPLAY_MIRROR_Y true       // 上下镜像
-#define DISPLAY_SWAP_XY  true       // 需要交换XY以支持横屏
+#define DISPLAY_MIRROR_Y false         // 上下镜像
+#define DISPLAY_SWAP_XY  true       // 交换XY，使用横屏
 
 // LCD时序配置
 #define LCD_PIXEL_CLOCK_HZ  (80 * 1000 * 1000)  // 80MHz
