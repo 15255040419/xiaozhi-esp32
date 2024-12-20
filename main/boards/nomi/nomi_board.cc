@@ -34,9 +34,26 @@ private:
     static St7789Display* display_;
 
     void InitializeButtons() {
+        gpio_config_t io_conf = {
+            .pin_bit_mask = (1ULL << BOOT_BUTTON_GPIO),
+            .mode = GPIO_MODE_INPUT,
+            .pull_up_en = GPIO_PULLUP_ENABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE
+        };
+        gpio_config(&io_conf);
+        
         boot_button_.OnClick([this]() {
+            auto& app = Application::GetInstance();
+            if (app.GetChatState() == kChatStateUnknown && !WifiStation::GetInstance().IsConnected()) {
+                ResetWifiConfiguration();
+            }
         });
-        boot_button_.OnLongPress([this]() {
+        boot_button_.OnPressDown([this]() {
+            Application::GetInstance().StartListening();
+        });
+        boot_button_.OnPressUp([this]() {
+            Application::GetInstance().StopListening();
         });
     }
 
@@ -83,17 +100,11 @@ private:
         }
     }
 
-    void InitializeSpiAndTf() {
-        // 不再需要初始化SPI总线，因为我们使用SDMMC模式
-        // TF卡的初始化将在tf_card_.Initialize()中完成
-    }
-
 public:
     NomiBoard() : 
         boot_button_(BOOT_BUTTON_GPIO),
         system_reset_(RESET_BUTTON_GPIO, GPIO_NUM_NC) {
         
-        InitializeSpiAndTf();  // 先初始化SPI总线
         InitializeButtons();
         InitializeIot();
         InitializePowerManagement();

@@ -23,4 +23,4 @@ private:
     adc_channel_t adc_channel_;
     
     int ReadVoltage();
-}; 
+};
