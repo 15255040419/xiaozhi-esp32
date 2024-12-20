@@ -2,7 +2,7 @@
 #include "config.h"
 #include <esp_log.h>
 #include <esp_vfs_fat.h>
-#include <driver/sdspi_host.h>
+#include <driver/sdmmc_host.h>
 #include <sys/stat.h>
 #include <dirent.h>
 
@@ -15,15 +15,20 @@ bool TfCard::Initialize() {
         .allocation_unit_size = 16 * 1024
     };
 
-    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-    host.slot = SPI2_HOST;
+    // 使用SDMMC主机而不是SPI
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.flags = SDMMC_HOST_FLAG_1BIT;  // 使用1线模式
     host.max_freq_khz = SDMMC_FREQ_DEFAULT;
 
-    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_config.gpio_cs = TF_CS_PIN;
-    slot_config.host_id = static_cast<spi_host_device_t>(host.slot);
+    // 配置SDMMC槽
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+    slot_config.width = 1;  // 1线模式
+    slot_config.clk = TF_SCK_PIN;
+    slot_config.cmd = TF_MOSI_PIN;
+    slot_config.d0 = TF_MISO_PIN;
 
-    esp_err_t ret = esp_vfs_fat_sdspi_mount(TF_MOUNT_POINT, &host, &slot_config, &mount_config, &card_);
+    // 挂载SD卡
+    esp_err_t ret = esp_vfs_fat_sdmmc_mount(TF_MOUNT_POINT, &host, &slot_config, &mount_config, &card_);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to mount TF card (%s)", esp_err_to_name(ret));
         return false;
@@ -31,6 +36,33 @@ bool TfCard::Initialize() {
 
     mounted_ = true;
     ESP_LOGI(TAG, "TF card mounted");
+    
+    // 打印卡信息
+    sdmmc_card_print_info(stdout, card_);
+
+    // 写入一个测试文件
+    const char* test_str = "Test File Content\n";
+    ESP_LOGI(TAG, "Writing test file...");
+    FILE* f = fopen("/sdcard/test.txt", "w");
+    if (f == NULL) {
+        ESP_LOGE(TAG, "Failed to open file for writing");
+    } else {
+        fprintf(f, "%s", test_str);
+        fclose(f);
+        ESP_LOGI(TAG, "File written");
+    }
+    
+    // 列出根目录文件
+    ESP_LOGI(TAG, "Listing root directory:");
+    DIR* dir = opendir("/sdcard");
+    if (dir) {
+        struct dirent* ent;
+        while ((ent = readdir(dir)) != NULL) {
+            ESP_LOGI(TAG, "  %s", ent->d_name);
+        }
+        closedir(dir);
+    }
+    
     return true;
 }
 

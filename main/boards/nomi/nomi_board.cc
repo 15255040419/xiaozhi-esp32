@@ -84,17 +84,8 @@ private:
     }
 
     void InitializeSpiAndTf() {
-        spi_bus_config_t bus_cfg = {
-            .mosi_io_num = TF_MOSI_PIN,
-            .miso_io_num = TF_MISO_PIN,
-            .sclk_io_num = TF_SCK_PIN,
-            .quadwp_io_num = -1,
-            .quadhd_io_num = -1,
-            .max_transfer_sz = DISPLAY_WIDTH * DISPLAY_HEIGHT * 2,
-        };
-        ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &bus_cfg, SPI_DMA_CH_AUTO));
-        
-        // TF卡会共用这个SPI总线
+        // 不再需要初始化SPI总线，因为我们使用SDMMC模式
+        // TF卡的初始化将在tf_card_.Initialize()中完成
     }
 
 public:
