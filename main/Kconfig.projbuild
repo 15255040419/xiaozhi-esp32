@@ -52,19 +52,6 @@ choice BOARD_TYPE
         bool "立创开发板"
     config BOARD_TYPE_NOMI
         bool "NOMI"
-        select AUDIO_CODEC_TYPE_MAX98357
-endchoice
-
-choice AUDIO_CODEC_TYPE
-    prompt "Audio Codec Type"
-    default AUDIO_CODEC_TYPE_MAX98357 if BOARD_TYPE_NOMI
-    default AUDIO_CODEC_TYPE_NONE
-    config AUDIO_CODEC_TYPE_NONE
-        bool "No Audio Codec"
-    config AUDIO_CODEC_TYPE_MAX98357
-        bool "MAX98357"
-    config AUDIO_CODEC_TYPE_ES8311
-        bool "ES8311"
 endchoice
 
 endmenu
