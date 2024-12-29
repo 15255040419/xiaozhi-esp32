@@ -10,6 +10,7 @@
 #include "tf_card.h"
 #include "application.h"
 #include "wifi_station.h"
+#include "gif_player.h"
 
 #include <esp_log.h>
 #include <driver/i2c_master.h>
@@ -32,6 +33,7 @@ private:
     esp_timer_handle_t power_save_timer_;
     TfCard tf_card_;
     static St7789Display* display_;
+    GifPlayer* gif_player_;
 
     void InitializeButtons() {
         gpio_config_t io_conf = {
@@ -103,7 +105,8 @@ private:
 public:
     NomiBoard() : 
         boot_button_(BOOT_BUTTON_GPIO),
-        system_reset_(RESET_BUTTON_GPIO, GPIO_NUM_NC) {
+        system_reset_(RESET_BUTTON_GPIO, GPIO_NUM_NC),
+        gif_player_(nullptr) {
         
         InitializeButtons();
         InitializeIot();
@@ -123,9 +126,26 @@ public:
             };
             gpio_config(&io_conf);
         }
+
+        // 初始化显示屏
+        GetDisplay();
+
+        // 初始化并启动GIF播放器
+        if (display_) {
+            gif_player_ = new GifPlayer(display_);
+            if (gif_player_->Initialize()) {
+                gif_player_->StartLoop();
+                ESP_LOGI(TAG, "GIF player started");
+            } else {
+                ESP_LOGE(TAG, "Failed to initialize GIF player");
+            }
+        }
     }
 
     ~NomiBoard() {
+        if (gif_player_) {
+            delete gif_player_;
+        }
     }
 
     virtual Led* GetBuiltinLed() override {

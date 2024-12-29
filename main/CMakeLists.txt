@@ -55,21 +55,34 @@ elseif(CONFIG_BOARD_TYPE_TERRENCE_C3_DEV)
 elseif(CONFIG_BOARD_TYPE_NOMI)
     set(BOARD_TYPE "nomi")
 endif()
+
+# 添加板级文件
 file(GLOB BOARD_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_TYPE}/*.cc)
 list(APPEND SOURCES ${BOARD_SOURCES})
+
+# 如果是NOMI板，添加GIF文件
+if(CONFIG_BOARD_TYPE_NOMI)
+    file(GLOB GIF_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/boards/nomi/gif/*.c)
+    list(APPEND SOURCES ${GIF_SOURCES})
+endif()
 
 if(CONFIG_IDF_TARGET_ESP32S3)
     list(APPEND SOURCES "audio_processing/audio_processor.cc" "audio_processing/wake_word_detect.cc")
 endif()
 
-idf_component_register(SRCS ${SOURCES}
-                    EMBED_FILES "assets/err_reg.p3" "assets/err_pin.p3" "assets/err_wificonfig.p3"
-                    INCLUDE_DIRS ${INCLUDE_DIRS}
-                    REQUIRES fatfs vfs driver lvgl esp_lvgl_port esp-opus esp-opus-encoder app_update esp_http_client esp_app_format esp_partition esp_system
-                    WHOLE_ARCHIVE
-                    )
+idf_component_register(
+    SRCS ${SOURCES}
+    EMBED_FILES "assets/err_reg.p3" "assets/err_pin.p3" "assets/err_wificonfig.p3"
+    INCLUDE_DIRS ${INCLUDE_DIRS}
+    REQUIRES fatfs vfs driver lvgl esp_lvgl_port esp-opus esp-opus-encoder app_update esp_http_client esp_app_format esp_partition esp_system esp_lcd esp_adc esp_timer esp_psram
+    WHOLE_ARCHIVE
+)
 
-# 使用 target_compile_definitions 来定义 BOARD_TYPE
+# 使用 target_compile_definitions 来定义 BOARD_TYPE 和 LVGL配置
 target_compile_definitions(${COMPONENT_LIB}
-                    PRIVATE BOARD_TYPE=\"${BOARD_TYPE}\"
-                    )
+    PRIVATE 
+    BOARD_TYPE=\"${BOARD_TYPE}\"
+    LV_CONF_INCLUDE_SIMPLE=1
+    LV_USE_GIF=1
+    LV_GIF_CACHE_DECODING_DATA=1
+)
