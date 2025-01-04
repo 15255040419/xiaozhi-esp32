@@ -17,7 +17,23 @@ LV_IMG_DECLARE(game);
 
 static const char* TAG = "GifPlayer";
 
-static void timer_cb(lv_timer_t* timer) {
+// 定义每个动画的播放时长（毫秒）
+const uint32_t GifPlayer::ANIMATION_DURATIONS[] = {
+    5000,   // lgsx
+    3000,   // lzhch
+    4000,   // ldtlr
+    3000,   // ldxe
+    3000,   // lwq
+    4000,   // llr
+    3000,   // lzy
+    3000,   // lbuyao
+    4000,   // lyoushang
+    3000,   // lzuoyou
+    5000,   // game
+    4000    // lshuizl
+};
+
+void GifPlayer::timer_cb(lv_timer_t* timer) {
     GifPlayer* player = static_cast<GifPlayer*>(timer->user_data);
     if (player) {
         player->LoadNextAnimation();
@@ -69,8 +85,8 @@ bool GifPlayer::Initialize() {
     // 添加事件回调
     lv_obj_add_event_cb(current_gif_, OnGifEvent, LV_EVENT_READY, this);
     
-    // 创建定时器，每10秒切换一次动画
-    timer_ = lv_timer_create(timer_cb, 10000, this);
+    // 创建定时器，初始时长为第一个动画的时长
+    timer_ = lv_timer_create(timer_cb, ANIMATION_DURATIONS[0], this);
     if (!timer_) {
         ESP_LOGE(TAG, "Failed to create timer");
         return false;
@@ -130,6 +146,11 @@ void GifPlayer::LoadNextAnimation() {
             current_index_ = 0;
             lv_gif_set_src(current_gif_, &lgsx);
             break;
+    }
+    
+    // 更新定时器的周期为当前动画的时长
+    if (timer_) {
+        lv_timer_set_period(timer_, ANIMATION_DURATIONS[current_index_]);
     }
     
     current_index_ = (current_index_ + 1) % 12;  // 总共12个动画
