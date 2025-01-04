@@ -356,6 +356,11 @@ void Application::Start() {
                 if (text != NULL) {
                     ESP_LOGI(TAG, "<< %s", text->valuestring);
                     display->SetChatMessage("assistant", text->valuestring);
+                    // 显示说话文字
+                    auto& board = Board::GetInstance();
+                    if (auto* gif_player = board.GetGifPlayer()) {
+                        gif_player->ShowSpeakingText(text->valuestring);
+                    }
                 }
             }
         } else if (strcmp(type->valuestring, "stt") == 0) {

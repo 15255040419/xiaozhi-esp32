@@ -3,7 +3,6 @@
 
 // 声明所有 GIF 图像
 LV_IMG_DECLARE(lzhch);
-LV_IMG_DECLARE(lbuyao);
 LV_IMG_DECLARE(ldtlr);
 LV_IMG_DECLARE(ldxe);
 LV_IMG_DECLARE(lgsx);
@@ -28,7 +27,6 @@ const uint32_t GifPlayer::ANIMATION_DURATIONS[] = {
     3000,   // lwq
     4000,   // llr
     3000,   // lzy
-    3000,   // lbuyao
     4000,   // lyoushang
     3000,   // lzuoyou
     5000,   // game
@@ -48,6 +46,9 @@ GifPlayer::GifPlayer(Display* display)
     , standby_gif_(nullptr)
     , listening_gif_(nullptr)
     , speaking_gif_(nullptr)
+    , text_label_(nullptr)
+    , text_timer_(nullptr)
+    , text_pos_(0)
     , current_index_(0)
     , timer_(nullptr) {
 }
@@ -104,6 +105,28 @@ bool GifPlayer::Initialize() {
         lv_obj_add_flag(gif, LV_OBJ_FLAG_HIDDEN);  // 初始时隐藏所有GIF
     }
     
+    // 创建文字标签
+    text_label_ = lv_label_create(lv_scr_act());
+    if (!text_label_) {
+        ESP_LOGE(TAG, "Failed to create text label");
+        return false;
+    }
+    
+    // 设置文字标签样式
+    static lv_style_t style_text;
+    lv_style_init(&style_text);
+    lv_style_set_text_font(&style_text, &font_puhui_14_1);
+    lv_style_set_text_color(&style_text, lv_color_white());
+    lv_style_set_text_align(&style_text, LV_TEXT_ALIGN_CENTER);
+    
+    lv_obj_add_style(text_label_, &style_text, 0);
+    lv_obj_set_width(text_label_, LV_PCT(90));  // 设置标签宽度为屏幕的90%
+    lv_obj_set_style_text_align(text_label_, LV_TEXT_ALIGN_CENTER, 0);
+    
+    // 将标签放在屏幕底部
+    lv_obj_align(text_label_, LV_ALIGN_BOTTOM_MID, 0, -20);
+    lv_obj_add_flag(text_label_, LV_OBJ_FLAG_HIDDEN);  // 初始时隐藏文字
+    
     // 加载GIF源
     lv_gif_set_src(standby_gif_, &lgsx);
     lv_gif_set_src(listening_gif_, &ting);
@@ -113,8 +136,8 @@ bool GifPlayer::Initialize() {
     current_gif_ = standby_gif_;
     lv_obj_clear_flag(current_gif_, LV_OBJ_FLAG_HIDDEN);
     
-    // 创建定时器
-    timer_ = lv_timer_create(timer_cb, ANIMATION_DURATIONS[0], this);
+    // 创建定时器，增加定时器间隔以降低CPU占用
+    timer_ = lv_timer_create(timer_cb, ANIMATION_DURATIONS[0] + 100, this);
     if (!timer_) {
         ESP_LOGE(TAG, "Failed to create timer");
         return false;
@@ -146,14 +169,44 @@ void GifPlayer::SwitchToAnimation(lv_obj_t* gif) {
     lv_timer_handler();
 }
 
-void GifPlayer::ShowListeningAnimation() {
-    ESP_LOGI(TAG, "Showing listening animation");
-    SwitchToAnimation(listening_gif_);
+void GifPlayer::ShowSpeakingText(const char* text) {
+    if (!text_label_ || !text) {
+        return;
+    }
+    
+    // 停止之前的文字动画
+    if (text_timer_) {
+        lv_timer_del(text_timer_);
+        text_timer_ = nullptr;
+    }
+    
+    // 保存新文字
+    current_text_ = text;
+    text_pos_ = 0;
+    
+    // 清空标签并显示
+    lv_label_set_text(text_label_, "");
+    lv_obj_clear_flag(text_label_, LV_OBJ_FLAG_HIDDEN);
+    
+    // 创建文字动画定时器
+    text_timer_ = lv_timer_create([](lv_timer_t* timer) {
+        GifPlayer* player = static_cast<GifPlayer*>(timer->user_data);
+        player->UpdateSpeakingText();
+    }, TEXT_ANIMATION_INTERVAL, this);
 }
 
-void GifPlayer::ShowSpeakingAnimation() {
-    ESP_LOGI(TAG, "Showing speaking animation");
-    SwitchToAnimation(speaking_gif_);
+void GifPlayer::UpdateSpeakingText() {
+    if (text_pos_ >= current_text_.length()) {
+        // 文字显示完毕，删除定时器
+        lv_timer_del(text_timer_);
+        text_timer_ = nullptr;
+        return;
+    }
+    
+    // 逐字显示文本
+    std::string display_text = current_text_.substr(0, text_pos_ + 1);
+    lv_label_set_text(text_label_, display_text.c_str());
+    text_pos_++;
 }
 
 void GifPlayer::StartLoop() {
@@ -162,6 +215,24 @@ void GifPlayer::StartLoop() {
     if (timer_) {
         lv_timer_resume(timer_);
     }
+    // 隐藏文字标签
+    if (text_label_) {
+        lv_obj_add_flag(text_label_, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void GifPlayer::ShowListeningAnimation() {
+    ESP_LOGI(TAG, "Showing listening animation");
+    SwitchToAnimation(listening_gif_);
+    // 隐藏文字标签
+    if (text_label_) {
+        lv_obj_add_flag(text_label_, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void GifPlayer::ShowSpeakingAnimation() {
+    ESP_LOGI(TAG, "Showing speaking animation");
+    SwitchToAnimation(speaking_gif_);
 }
 
 void GifPlayer::LoadNextAnimation() {
@@ -203,18 +274,15 @@ void GifPlayer::LoadNextAnimation() {
                 lv_gif_set_src(standby_gif_, &lzy);   // 左眼
                 break;
             case 7:
-                lv_gif_set_src(standby_gif_, &lbuyao); // 不要
-                break;
-            case 8:
                 lv_gif_set_src(standby_gif_, &lyoushang); // 右上
                 break;
-            case 9:
+            case 8:
                 lv_gif_set_src(standby_gif_, &lzuoyou);   // 左右
                 break;
-            case 10:
+            case 9:
                 lv_gif_set_src(standby_gif_, &game);      // 游戏
                 break;
-            case 11:
+            case 10:
                 lv_gif_set_src(standby_gif_, &lshuizl);   // 睡着了
                 break;
             default:
@@ -231,6 +299,6 @@ void GifPlayer::LoadNextAnimation() {
             lv_timer_set_period(timer_, ANIMATION_DURATIONS[current_index_]);
         }
         
-        current_index_ = (current_index_ + 1) % 12;  // 总共12个动画
+        current_index_ = (current_index_ + 1) % 11;  // 总共11个动画
     }
 } 
