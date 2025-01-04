@@ -119,8 +119,8 @@ St7789Display::St7789Display(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
     
     InitializeBacklight(backlight_pin);
 
-    // draw white
-    std::vector<uint16_t> buffer(width_, 0xFFFF);
+    // draw black
+    std::vector<uint16_t> buffer(width_, 0x0000);  // 0x0000 represents black in RGB565 format
     for (int y = 0; y < height_; y++) {
         esp_lcd_panel_draw_bitmap(panel_, 0, y, width_, y + 1, buffer.data());
     }
@@ -270,7 +270,10 @@ void St7789Display::SetupUI() {
 
     auto screen = lv_disp_get_scr_act(lv_disp_get_default());
     lv_obj_set_style_text_font(screen, &font_puhui_14_1, 0);
-    lv_obj_set_style_text_color(screen, lv_color_black(), 0);
+    // 设置黑色背景
+    lv_obj_set_style_bg_color(screen, lv_color_black(), 0);
+    // 设置白色文字
+    lv_obj_set_style_text_color(screen, lv_color_white(), 0);
 
     /* Container */
     container_ = lv_obj_create(screen);
@@ -279,50 +282,50 @@ void St7789Display::SetupUI() {
     lv_obj_set_style_pad_all(container_, 0, 0);
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_pad_row(container_, 0, 0);
+    // 设置容器背景为黑色
+    lv_obj_set_style_bg_color(container_, lv_color_black(), 0);
 
-    /* Status bar */
-    status_bar_ = lv_obj_create(container_);
-    lv_obj_set_size(status_bar_, LV_HOR_RES, 18);
-    lv_obj_set_style_radius(status_bar_, 0, 0);
-    
     /* Content */
     content_ = lv_obj_create(container_);
     lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_radius(content_, 0, 0);
     lv_obj_set_width(content_, LV_HOR_RES);
     lv_obj_set_flex_grow(content_, 1);
+    // 设置内容区背景为黑色
+    lv_obj_set_style_bg_color(content_, lv_color_black(), 0);
+    lv_obj_set_style_border_width(content_, 0, 0);
 
+    // 创建状态标签（在屏幕中间）
+    status_label_ = lv_label_create(content_);
+    lv_obj_set_style_text_color(status_label_, lv_color_white(), 0);
+    lv_label_set_text(status_label_, "正在初始化");
+    lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(status_label_, LV_LABEL_LONG_WRAP);  // 允许文本换行
+    lv_obj_set_width(status_label_, 200);  // 设置标签宽度，超过此宽度将换行
+    lv_obj_center(status_label_);
+
+    // 创建表情标签（在状态标签下方）
     emotion_label_ = lv_label_create(content_);
     lv_obj_set_style_text_font(emotion_label_, &font_awesome_30_1, 0);
+    lv_obj_set_style_text_color(emotion_label_, lv_color_white(), 0);
     lv_label_set_text(emotion_label_, FONT_AWESOME_AI_CHIP);
-    lv_obj_center(emotion_label_);
+    lv_obj_align_to(emotion_label_, status_label_, LV_ALIGN_OUT_BOTTOM_MID, 0, 20);
 
-    /* Status bar */
-    lv_obj_set_flex_flow(status_bar_, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_all(status_bar_, 0, 0);
-    lv_obj_set_style_border_width(status_bar_, 0, 0);
-    lv_obj_set_style_pad_column(status_bar_, 0, 0);
-
-    network_label_ = lv_label_create(status_bar_);
-    lv_label_set_text(network_label_, "");
-    lv_obj_set_style_text_font(network_label_, &font_awesome_14_1, 0);
-
-    notification_label_ = lv_label_create(status_bar_);
-    lv_obj_set_flex_grow(notification_label_, 1);
+    // 创建通知标签（隐藏）
+    notification_label_ = lv_label_create(content_);
+    lv_obj_set_style_text_color(notification_label_, lv_color_white(), 0);
     lv_obj_set_style_text_align(notification_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_text(notification_label_, "通知");
     lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_center(notification_label_);
 
-    status_label_ = lv_label_create(status_bar_);
-    lv_obj_set_flex_grow(status_label_, 1);
-    lv_label_set_text(status_label_, "正在初始化");
-    lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_CENTER, 0);
-
-    mute_label_ = lv_label_create(status_bar_);
-    lv_label_set_text(mute_label_, "");
-    lv_obj_set_style_text_font(mute_label_, &font_awesome_14_1, 0);
-
-    battery_label_ = lv_label_create(status_bar_);
-    lv_label_set_text(battery_label_, "");
-    lv_obj_set_style_text_font(battery_label_, &font_awesome_14_1, 0);
+    // 其他必要的标签（隐藏在屏幕外或设置为不可见）
+    network_label_ = lv_label_create(container_);
+    lv_obj_add_flag(network_label_, LV_OBJ_FLAG_HIDDEN);
+    
+    mute_label_ = lv_label_create(container_);
+    lv_obj_add_flag(mute_label_, LV_OBJ_FLAG_HIDDEN);
+    
+    battery_label_ = lv_label_create(container_);
+    lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);
 }

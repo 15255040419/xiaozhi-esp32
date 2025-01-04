@@ -129,17 +129,6 @@ public:
 
         // 初始化显示屏
         GetDisplay();
-
-        // 初始化并启动GIF播放器
-        if (display_) {
-            gif_player_ = new GifPlayer(display_);
-            if (gif_player_->Initialize()) {
-                gif_player_->StartLoop();
-                ESP_LOGI(TAG, "GIF player started");
-            } else {
-                ESP_LOGE(TAG, "Failed to initialize GIF player");
-            }
-        }
     }
 
     ~NomiBoard() {
@@ -233,6 +222,26 @@ public:
 
     bool IsTfCardReady() const {
         return tf_card_.IsMounted();
+    }
+
+    GifPlayer* GetGifPlayer() {
+        return gif_player_;
+    }
+
+    virtual void StartNetwork() override {
+        WifiBoard::StartNetwork();
+        
+        // 在网络连接成功后，初始化并启动GIF播放器
+        auto& wifi_station = WifiStation::GetInstance();
+        if (wifi_station.IsConnected() && display_ && !gif_player_) {
+            gif_player_ = new GifPlayer(display_);
+            if (gif_player_->Initialize()) {
+                gif_player_->StartLoop();
+                ESP_LOGI(TAG, "GIF player started");
+            } else {
+                ESP_LOGE(TAG, "Failed to initialize GIF player");
+            }
+        }
     }
 };
 

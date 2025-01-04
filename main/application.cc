@@ -1,4 +1,5 @@
 #include "application.h"
+#include "boards/nomi/gif_player.h"
 #include "board.h"
 #include "display.h"
 #include "system_info.h"
@@ -546,12 +547,18 @@ void Application::SetChatState(ChatState state) {
 
     auto display = Board::GetInstance().GetDisplay();
     auto builtin_led = Board::GetInstance().GetBuiltinLed();
+    auto& board = Board::GetInstance();
+    auto* gif_player = board.GetGifPlayer();
+
     switch (state) {
         case kChatStateUnknown:
         case kChatStateIdle:
             builtin_led->TurnOff();
             display->SetStatus("待命");
             display->SetEmotion("neutral");
+            if (gif_player) {
+                gif_player->StartLoop();  // 恢复循环播放
+            }
 #ifdef CONFIG_IDF_TARGET_ESP32S3
             audio_processor_.Stop();
 #endif
@@ -566,6 +573,9 @@ void Application::SetChatState(ChatState state) {
             builtin_led->TurnOn();
             display->SetStatus("聆听中...");
             display->SetEmotion("neutral");
+            if (gif_player) {
+                gif_player->ShowListeningAnimation();  // 显示聆听动画
+            }
             ResetDecoder();
             opus_encoder_->ResetState();
 #if CONFIG_IDF_TARGET_ESP32S3
@@ -577,6 +587,9 @@ void Application::SetChatState(ChatState state) {
             builtin_led->SetGreen();
             builtin_led->TurnOn();
             display->SetStatus("说话中...");
+            if (gif_player) {
+                gif_player->ShowSpeakingAnimation();  // 显示说话动画
+            }
             ResetDecoder();
 #if CONFIG_IDF_TARGET_ESP32S3
             audio_processor_.Stop();

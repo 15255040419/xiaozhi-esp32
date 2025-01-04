@@ -44,6 +44,7 @@ public:
     virtual bool GetBatteryLevel(int &level, bool& charging);
     virtual std::string GetJson();
     virtual void SetPowerSaveMode(bool enabled) = 0;
+    virtual class GifPlayer* GetGifPlayer() { return nullptr; }
 };
 
 #define DECLARE_BOARD(BOARD_CLASS_NAME) \
