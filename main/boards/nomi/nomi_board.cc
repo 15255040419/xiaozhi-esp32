@@ -1,7 +1,6 @@
 #include "../common/wifi_board.h"
 #include "../common/system_reset.h"
 #include "ap5056.h"
-#include "audio_codecs/no_audio_codec.h"
 #include "display/st7789_display.h"
 #include "button.h"
 #include "led.h"
@@ -11,6 +10,7 @@
 #include "application.h"
 #include "wifi_station.h"
 #include "gif_player.h"
+#include "audio_codecs/ns4168_audio_codec.h"
 
 #include <esp_log.h>
 #include <driver/i2c_master.h>
@@ -144,12 +144,16 @@ public:
 
     virtual AudioCodec* GetAudioCodec() override {
 #ifdef AUDIO_I2S_METHOD_SIMPLEX
-        static NoAudioCodec audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
+        static NS4168AudioCodec audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
             AUDIO_I2S_SPK_GPIO_BCLK, AUDIO_I2S_SPK_GPIO_LRCK, AUDIO_I2S_SPK_GPIO_DOUT, 
             AUDIO_I2S_MIC_GPIO_SCK, AUDIO_I2S_MIC_GPIO_WS, AUDIO_I2S_MIC_GPIO_DIN);
-#else
-        static NoAudioCodec audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
-            AUDIO_I2S_GPIO_BCLK, AUDIO_I2S_GPIO_WS, AUDIO_I2S_GPIO_DOUT, AUDIO_I2S_GPIO_DIN);
+        
+        static bool initialized = false;
+        if (!initialized) {
+            audio_codec.SetOutputVolume(AUDIO_OUTPUT_VOLUME);
+            ESP_LOGI(TAG, "NS4168 codec initialized");
+            initialized = true;
+        }
 #endif
         return &audio_codec;
     }

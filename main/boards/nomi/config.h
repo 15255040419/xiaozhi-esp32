@@ -3,19 +3,24 @@
 
 #include <driver/gpio.h>
 
-// 音频配置(与bread-compact-wifi相同)
-#define AUDIO_INPUT_SAMPLE_RATE  16000
-#define AUDIO_OUTPUT_SAMPLE_RATE 24000
+// 音频配置
+#define AUDIO_INPUT_SAMPLE_RATE  16000    // 麦克风采样率 16kHz
+#define AUDIO_OUTPUT_SAMPLE_RATE 16000    // 扬声器采样率改为 16kHz（原来是24000）
 #define AUDIO_I2S_METHOD_SIMPLEX
 
+// 音频音量配置
+#define AUDIO_OUTPUT_VOLUME      80     // 初始音量 (0-100)
+
 #ifdef AUDIO_I2S_METHOD_SIMPLEX
+// MSM261 麦克风引脚定义
 #define AUDIO_I2S_MIC_GPIO_WS   GPIO_NUM_4    // MSM261 WS
 #define AUDIO_I2S_MIC_GPIO_SCK  GPIO_NUM_5    // MSM261 SCK
 #define AUDIO_I2S_MIC_GPIO_DIN  GPIO_NUM_6    // MSM261 SD
-#define AUDIO_I2S_SPK_GPIO_DOUT GPIO_NUM_7    // MAX98357 DIN
-#define AUDIO_I2S_SPK_GPIO_BCLK GPIO_NUM_15   // MAX98357 BCLK
-#define AUDIO_I2S_SPK_GPIO_LRCK GPIO_NUM_16   // MAX98357 LRCLK
-// MAX98357的SD_MODE#已经在硬件上接地，不需要软件控制
+
+// NS4168 音频输出引脚定义
+#define AUDIO_I2S_SPK_GPIO_DOUT GPIO_NUM_7    // NS4168 DIN
+#define AUDIO_I2S_SPK_GPIO_BCLK GPIO_NUM_15   // NS4168 BCLK
+#define AUDIO_I2S_SPK_GPIO_LRCK GPIO_NUM_16   // NS4168 LRCLK
 #endif
 
 // 显示屏配置

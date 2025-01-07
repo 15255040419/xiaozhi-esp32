@@ -1,5 +1,7 @@
 #include "gif_player.h"
 #include <esp_log.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 // 声明所有 GIF 图像
 LV_IMG_DECLARE(lzhch);
@@ -18,19 +20,18 @@ LV_IMG_DECLARE(kaixin);
 
 static const char* TAG = "GifPlayer";
 
-// 定义每个动画的播放时长（毫秒）
+// 定义每个动画的播放时长（毫秒），移除 game 动画的时长
 const uint32_t GifPlayer::ANIMATION_DURATIONS[] = {
-    5000,   // lgsx
-    3000,   // lzhch
-    4000,   // ldtlr
-    3000,   // ldxe
-    3000,   // lwq
-    4000,   // llr
-    3000,   // lzy
-    4000,   // lyoushang
-    3000,   // lzuoyou
-    5000,   // game
-    4000    // lshuizl
+    8000,   // lgsx
+    6000,   // lzhch
+    6000,   // ldtlr
+    6000,   // ldxe
+    6000,   // lwq
+    6000,   // llr
+    6000,   // lzy
+    6000,   // lyoushang
+    6000,   // lzuoyou
+    8000    // lshuizl
 };
 
 void GifPlayer::timer_cb(lv_timer_t* timer) {
@@ -136,11 +137,16 @@ bool GifPlayer::Initialize() {
     current_gif_ = standby_gif_;
     lv_obj_clear_flag(current_gif_, LV_OBJ_FLAG_HIDDEN);
     
-    // 创建定时器，增加定时器间隔以降低CPU占用
-    timer_ = lv_timer_create(timer_cb, ANIMATION_DURATIONS[0] + 100, this);
+    // 创建定时器，增加初始间隔
+    timer_ = lv_timer_create(timer_cb, 8000, this);  // 增加到8秒
     if (!timer_) {
         ESP_LOGE(TAG, "Failed to create timer");
         return false;
+    }
+    
+    // 降低定时器优先级
+    if (timer_) {
+        lv_timer_set_period(timer_, 8000);  // 使用较长的周期来降低优先级
     }
     
     return true;
@@ -247,43 +253,46 @@ void GifPlayer::LoadNextAnimation() {
         // 清理之前的 GIF 内存
         lv_gif_set_src(standby_gif_, nullptr);
         
-        // 等待一帧渲染完成
-        lv_timer_handler();
+        // 强制进行垃圾回收
+        lv_mem_buf_free_all();
+        
+        // 等待多个帧渲染完成
+        for(int i = 0; i < 3; i++) {
+            lv_timer_handler();
+            vTaskDelay(10);  // 直接使用 tick 数
+        }
         
         // 循环切换动画
         switch (current_index_) {
             case 0:
-                lv_gif_set_src(standby_gif_, &lgsx);  // 待机
+                lv_gif_set_src(standby_gif_, &lgsx);
                 break;
             case 1:
-                lv_gif_set_src(standby_gif_, &lzhch); // 开心
+                lv_gif_set_src(standby_gif_, &lzhch);
                 break;
             case 2:
-                lv_gif_set_src(standby_gif_, &ldtlr); // 点头
+                lv_gif_set_src(standby_gif_, &ldtlr);
                 break;
             case 3:
-                lv_gif_set_src(standby_gif_, &ldxe);  // 点下额
+                lv_gif_set_src(standby_gif_, &ldxe);
                 break;
             case 4:
-                lv_gif_set_src(standby_gif_, &lwq);   // 微笑
+                lv_gif_set_src(standby_gif_, &lwq);
                 break;
             case 5:
-                lv_gif_set_src(standby_gif_, &llr);   // 左右
+                lv_gif_set_src(standby_gif_, &llr);
                 break;
             case 6:
-                lv_gif_set_src(standby_gif_, &lzy);   // 左眼
+                lv_gif_set_src(standby_gif_, &lzy);
                 break;
             case 7:
-                lv_gif_set_src(standby_gif_, &lyoushang); // 右上
+                lv_gif_set_src(standby_gif_, &lyoushang);
                 break;
             case 8:
-                lv_gif_set_src(standby_gif_, &lzuoyou);   // 左右
+                lv_gif_set_src(standby_gif_, &lzuoyou);
                 break;
             case 9:
-                lv_gif_set_src(standby_gif_, &game);      // 游戏
-                break;
-            case 10:
-                lv_gif_set_src(standby_gif_, &lshuizl);   // 睡着了
+                lv_gif_set_src(standby_gif_, &lshuizl);
                 break;
             default:
                 current_index_ = 0;
@@ -291,14 +300,17 @@ void GifPlayer::LoadNextAnimation() {
                 break;
         }
         
-        // 等待一帧渲染完成
-        lv_timer_handler();
+        // 等待多个帧渲染完成
+        for(int i = 0; i < 3; i++) {
+            lv_timer_handler();
+            vTaskDelay(10);  // 直接使用 tick 数
+        }
         
-        // 更新定时器的周期为当前动画的时长
+        // 更新定时器的周期
         if (timer_) {
             lv_timer_set_period(timer_, ANIMATION_DURATIONS[current_index_]);
         }
         
-        current_index_ = (current_index_ + 1) % 11;  // 总共11个动画
+        current_index_ = (current_index_ + 1) % 10;
     }
 } 
