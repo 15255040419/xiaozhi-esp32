@@ -70,6 +70,12 @@ if(CONFIG_IDF_TARGET_ESP32S3)
     list(APPEND SOURCES "audio_processing/audio_processor.cc" "audio_processing/wake_word_detect.cc")
 endif()
 
+# 添加 GIF 相关文件
+file(GLOB GIF_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.cc)
+file(GLOB GIF_RESOURCES ${CMAKE_CURRENT_SOURCE_DIR}/assets/gif/*.c)
+list(APPEND SOURCES ${GIF_SOURCES} ${GIF_RESOURCES})
+list(APPEND INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/assets)
+
 idf_component_register(
     SRCS ${SOURCES}
     EMBED_FILES "assets/err_reg.p3" "assets/err_pin.p3" "assets/err_wificonfig.p3"

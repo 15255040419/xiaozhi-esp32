@@ -7,6 +7,7 @@
 #include "config.h"
 #include "i2c_device.h"
 #include "iot/thing_manager.h"
+#include "gif_player.h"
 
 #include <esp_log.h>
 #include <esp_lcd_panel_vendor.h>
@@ -39,6 +40,7 @@ private:
     Button boot_button_;
     St7789Display* display_;
     Pca9557* pca9557_;
+    GifPlayer* gif_player_ = nullptr;
 
     void InitializeI2c() {
         // Initialize I2C peripheral
@@ -80,9 +82,15 @@ private:
         });
         boot_button_.OnPressDown([this]() {
             Application::GetInstance().StartListening();
+            if (gif_player_ && gif_player_->IsInitialized()) {
+                gif_player_->ShowListeningAnimation();
+            }
         });
         boot_button_.OnPressUp([this]() {
             Application::GetInstance().StopListening();
+            if (gif_player_ && gif_player_->IsInitialized()) {
+                gif_player_->StartLoop();
+            }
         });
     }
 
@@ -117,7 +125,8 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
         display_ = new St7789Display(panel_io, panel, DISPLAY_BACKLIGHT_PIN, DISPLAY_BACKLIGHT_OUTPUT_INVERT,
-                                    DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+                                    DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, 
+                                    DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
 
     // 物联网初始化，添加对 AI 可见设备
@@ -153,6 +162,28 @@ public:
 
     virtual Display* GetDisplay() override {
         return display_;
+    }
+
+    virtual GifPlayer* GetGifPlayer() override {
+        return gif_player_;
+    }
+
+    virtual void StartNetwork() override {
+        WifiBoard::StartNetwork();
+        
+        // 在网络连接成功后，初始化并启动 GIF 播放器
+        auto& wifi_station = WifiStation::GetInstance();
+        if (wifi_station.IsConnected() && display_ && !gif_player_) {
+            gif_player_ = new GifPlayer(display_);
+            if (gif_player_->Initialize()) {
+                gif_player_->StartLoop();
+                ESP_LOGI(TAG, "GIF player started");
+            } else {
+                ESP_LOGE(TAG, "Failed to initialize GIF player");
+                delete gif_player_;
+                gif_player_ = nullptr;
+            }
+        }
     }
 };
 
