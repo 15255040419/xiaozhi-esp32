@@ -329,3 +329,28 @@ void St7789Display::SetupUI() {
     battery_label_ = lv_label_create(container_);
     lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);
 }
+
+void St7789Display::InitializeLvgl() {
+    static lv_disp_draw_buf_t draw_buf;
+    lv_color_t* buf1 = (lv_color_t*)heap_caps_malloc(
+        DISPLAY_BUFFER_SIZE * sizeof(lv_color_t), 
+        MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL
+    );
+    lv_color_t* buf2 = (lv_color_t*)heap_caps_malloc(
+        DISPLAY_BUFFER_SIZE * sizeof(lv_color_t), 
+        MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL
+    );
+    
+    lv_disp_draw_buf_init(&draw_buf, buf1, buf2, DISPLAY_BUFFER_SIZE);
+    
+    static lv_disp_drv_t disp_drv;
+    lv_disp_drv_init(&disp_drv);
+    disp_drv.flush_cb = FlushDisplay;
+    disp_drv.draw_buf = &draw_buf;
+    disp_drv.hor_res = DISPLAY_WIDTH;
+    disp_drv.ver_res = DISPLAY_HEIGHT;
+    disp_drv.direct_mode = 1;         // 启用直接模式
+    disp_drv.full_refresh = 1;        // 全屏刷新
+    
+    lv_disp_drv_register(&disp_drv);
+}

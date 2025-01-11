@@ -216,11 +216,11 @@ void Application::Start() {
     codec->Start();
 
     /* Start the main loop */
-    xTaskCreate([](void* arg) {
+    xTaskCreatePinnedToCore([](void* arg) {
         Application* app = (Application*)arg;
         app->MainLoop();
         vTaskDelete(NULL);
-    }, "main_loop", 4096 * 2, this, 2, nullptr);
+    }, "main_loop", 4096 * 2, this, 2, nullptr, 0);
 
     /* Wait for the network to be ready */
     board.StartNetwork();
@@ -241,6 +241,7 @@ void Application::Start() {
                     protocol_->SendAudio(opus);
                 });
             });
+            vTaskDelay(pdMS_TO_TICKS(1));
         });
     });
 
