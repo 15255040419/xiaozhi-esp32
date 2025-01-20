@@ -29,6 +29,7 @@ protected:
     lv_obj_t* container_ = nullptr;
     lv_obj_t* side_bar_ = nullptr;
     lv_obj_t* chat_message_label_ = nullptr;
+    lv_obj_t* text_label_ = nullptr;
 
     void InitializeBacklight(gpio_num_t backlight_pin);
     void SetBacklight(uint8_t brightness);
@@ -37,6 +38,16 @@ protected:
     virtual void SetupUI();
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
+
+private:
+    static void TypewriterTimerCb(lv_timer_t* timer);
+    void UpdateTypewriterText();
+    
+    std::string full_message_;      // 完整消息
+    std::string current_message_;   // 当前显示的消息
+    size_t char_index_ = 0;        // 当前字符索引
+    lv_timer_t* typewriter_timer_ = nullptr;
+    static constexpr uint32_t TYPEWRITER_DELAY = 100;  // 打字间隔(ms)
 
 public:
     LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,

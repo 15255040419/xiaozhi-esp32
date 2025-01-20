@@ -18,6 +18,7 @@
 LV_FONT_DECLARE(font_puhui_14_1);
 LV_FONT_DECLARE(font_awesome_30_1);
 LV_FONT_DECLARE(font_awesome_14_1);
+LV_FONT_DECLARE(font_dingding);
 
 static lv_disp_drv_t disp_drv;
 static void lcd_lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map)
@@ -99,8 +100,8 @@ LcdDisplay::LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_
     
     InitializeBacklight(backlight_pin);
 
-    // draw white
-    std::vector<uint16_t> buffer(width_, 0xFFFF);
+    // 设置初始黑色背景
+    std::vector<uint16_t> buffer(width_, 0x0000);  // 0x0000 是黑色
     for (int y = 0; y < height_; y++) {
         esp_lcd_panel_draw_bitmap(panel_, 0, y, width_, y + 1, buffer.data());
     }
@@ -248,78 +249,139 @@ void LcdDisplay::Unlock() {
 void LcdDisplay::SetupUI() {
     DisplayLockGuard lock(this);
 
+    // 设置黑色背景
     auto screen = lv_disp_get_scr_act(lv_disp_get_default());
-    lv_obj_set_style_text_font(screen, &font_puhui_14_1, 0);
-    lv_obj_set_style_text_color(screen, lv_color_black(), 0);
-
-    /* Container */
-    container_ = lv_obj_create(screen);
-    lv_obj_set_size(container_, LV_HOR_RES, LV_VER_RES);
-    lv_obj_set_flex_flow(container_, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(container_, 0, 0);
-    lv_obj_set_style_border_width(container_, 0, 0);
-    lv_obj_set_style_pad_row(container_, 0, 0);
-
-    /* Status bar */
-    status_bar_ = lv_obj_create(container_);
-    lv_obj_set_size(status_bar_, LV_HOR_RES, 18);
-    lv_obj_set_style_radius(status_bar_, 0, 0);
+    lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), 0);
     
-    /* Content */
-    content_ = lv_obj_create(container_);
-    lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_style_radius(content_, 0, 0);
-    lv_obj_set_width(content_, LV_HOR_RES);
-    lv_obj_set_flex_grow(content_, 1);
+    // 状态栏
+    status_bar_ = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(status_bar_, LV_HOR_RES - 40, 40);
+    lv_obj_set_style_radius(status_bar_, 0, 0);
+    lv_obj_set_align(status_bar_, LV_ALIGN_TOP_MID);
+    lv_obj_set_style_bg_color(status_bar_, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_border_width(status_bar_, 0, 0);
 
-    lv_obj_set_flex_flow(content_, LV_FLEX_FLOW_COLUMN); // 垂直布局（从上到下）
-    lv_obj_set_flex_align(content_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_SPACE_EVENLY); // 子对象居中对齐，等距分布
-
-    emotion_label_ = lv_label_create(content_);
+    // 表情图标
+    emotion_label_ = lv_label_create(lv_scr_act());
     lv_obj_set_style_text_font(emotion_label_, &font_awesome_30_1, 0);
     lv_label_set_text(emotion_label_, FONT_AWESOME_AI_CHIP);
-    // lv_obj_center(emotion_label_);
+    lv_obj_set_align(emotion_label_, LV_ALIGN_TOP_MID);
+    lv_obj_set_y(emotion_label_, 50);
+    lv_obj_set_style_text_color(emotion_label_, lv_palette_main(LV_PALETTE_GREEN), 0);
 
-    chat_message_label_ = lv_label_create(content_);
-    lv_label_set_text(chat_message_label_, "");
-    lv_obj_set_width(chat_message_label_, LV_HOR_RES * 0.8); // 限制宽度为屏幕宽度的 80%
-    lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_WRAP); // 设置为自动换行模式
-    lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0); // 设置文本居中对齐
+    // 聊天消息标签
+    chat_message_label_ = lv_label_create(lv_scr_act());
+    lv_obj_set_width(chat_message_label_, LV_HOR_RES * 0.8);
+    lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(chat_message_label_, &font_dingding, 0);
+    lv_label_set_text(chat_message_label_, "AI聊天助手\n廖翎羽\nLIAO LING YU");
+    lv_obj_set_style_text_color(chat_message_label_, lv_palette_main(LV_PALETTE_GREEN), 0);
+    lv_obj_set_align(chat_message_label_, LV_ALIGN_BOTTOM_MID);
+    lv_obj_set_y(chat_message_label_, -70);  // 调整底部距离
 
-    /* Status bar */
-    lv_obj_set_flex_flow(status_bar_, LV_FLEX_FLOW_ROW);
+    // 状态栏内容
+    lv_obj_set_flex_flow(status_bar_, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_style_pad_all(status_bar_, 0, 0);
-    lv_obj_set_style_border_width(status_bar_, 0, 0);
     lv_obj_set_style_pad_column(status_bar_, 0, 0);
 
+    // WiFi图标
     network_label_ = lv_label_create(status_bar_);
     lv_label_set_text(network_label_, "");
+    lv_obj_set_y(network_label_, 10);
     lv_obj_set_style_text_font(network_label_, &font_awesome_14_1, 0);
+    lv_obj_set_style_text_color(network_label_, lv_palette_main(LV_PALETTE_GREEN), 0);
 
+    // 通知标签
     notification_label_ = lv_label_create(status_bar_);
     lv_obj_set_flex_grow(notification_label_, 1);
     lv_obj_set_style_text_align(notification_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(notification_label_, &font_dingding, 0);
+    lv_obj_set_style_text_color(notification_label_, lv_palette_main(LV_PALETTE_GREEN), 0);
     lv_label_set_text(notification_label_, "通知");
     lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
 
+    // 状态标签
     status_label_ = lv_label_create(status_bar_);
     lv_obj_set_flex_grow(status_label_, 1);
     lv_label_set_long_mode(status_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_label_set_text(status_label_, "正在初始化");
     lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(status_label_, &font_dingding, 0);
+    lv_obj_set_style_text_color(status_label_, lv_palette_main(LV_PALETTE_GREEN), 0);
+    lv_label_set_text(status_label_, "正在初始化");
 
+    // 电池图标
+    //battery_label_ = lv_label_create(status_bar_);
+    //lv_label_set_text(battery_label_, "");
+    //lv_obj_set_style_text_font(battery_label_, &font_awesome_14_1, 0);
+    //lv_obj_set_style_text_color(battery_label_, lv_palette_main(LV_PALETTE_GREEN), 0);
+    //lv_obj_set_align(battery_label_, LV_ALIGN_TOP_RIGHT);
+
+    // 静音图标
     mute_label_ = lv_label_create(status_bar_);
     lv_label_set_text(mute_label_, "");
     lv_obj_set_style_text_font(mute_label_, &font_awesome_14_1, 0);
-
-    battery_label_ = lv_label_create(status_bar_);
-    lv_label_set_text(battery_label_, "");
-    lv_obj_set_style_text_font(battery_label_, &font_awesome_14_1, 0);
+    lv_obj_set_style_text_color(mute_label_, lv_palette_main(LV_PALETTE_GREEN), 0);
 }
 
 void LcdDisplay::SetChatMessage(const std::string &role, const std::string &content) {
     if (chat_message_label_ == nullptr) {
         return;
     }
-    lv_label_set_text(chat_message_label_, content.c_str());
+    
+    // 替换中文标点
+    std::string display_text = content;
+    std::string::size_type pos = 0;
+    
+    const std::vector<std::pair<std::string, std::string>> replacements = {
+        {"：", ":"},
+    };
+    
+    for (const auto& [from, to] : replacements) {
+        while ((pos = display_text.find(from, pos)) != std::string::npos) {
+            display_text.replace(pos, from.length(), to);
+            pos += to.length();
+        }
+    }
+
+    // 重置打字机状态
+    full_message_ = display_text;
+    current_message_ = "";
+    char_index_ = 0;
+    
+    // 删除旧的定时器
+    if (typewriter_timer_) {
+        lv_timer_del(typewriter_timer_);
+    }
+    
+    // 创建新的定时器
+    typewriter_timer_ = lv_timer_create(TypewriterTimerCb, TYPEWRITER_DELAY, this);
+}
+
+void LcdDisplay::TypewriterTimerCb(lv_timer_t* timer) {
+    LcdDisplay* display = static_cast<LcdDisplay*>(timer->user_data);
+    display->UpdateTypewriterText();
+}
+
+void LcdDisplay::UpdateTypewriterText() {
+    if (char_index_ >= full_message_.length()) {
+        // 完成打字，删除定时器
+        lv_timer_del(typewriter_timer_);
+        typewriter_timer_ = nullptr;
+        return;
+    }
+    
+    // UTF-8字符处理
+    size_t char_len = 1;
+    unsigned char first_byte = full_message_[char_index_];
+    if ((first_byte & 0xE0) == 0xE0) {
+        char_len = 3;  // 中文字符
+    } else if ((first_byte & 0xC0) == 0xC0) {
+        char_len = 2;  // 双字节字符
+    }
+    
+    current_message_ += full_message_.substr(char_index_, char_len);
+    char_index_ += char_len;
+    
+    lv_label_set_text(chat_message_label_, current_message_.c_str());
 }
