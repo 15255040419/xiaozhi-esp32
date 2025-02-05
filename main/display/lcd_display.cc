@@ -278,7 +278,12 @@ void LcdDisplay::SetupUI() {
     lv_label_set_text(chat_message_label_, "AI聊天助手\n廖翎羽\nLIAO LING YU");
     lv_obj_set_style_text_color(chat_message_label_, lv_palette_main(LV_PALETTE_GREEN), 0);
     lv_obj_set_align(chat_message_label_, LV_ALIGN_BOTTOM_MID);
-    lv_obj_set_y(chat_message_label_, -70);  // 调整底部距离
+    lv_obj_set_y(chat_message_label_, 10);  // 调整底部距离
+    lv_obj_set_height(chat_message_label_, 120);  // 设置标签的高度，根据需要调整数值
+
+    // 设置文本垂直居中对齐
+    lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_style_align(chat_message_label_, LV_ALIGN_CENTER, LV_PART_MAIN);
 
     // 状态栏内容
     lv_obj_set_flex_flow(status_bar_, LV_FLEX_FLOW_ROW_WRAP);
