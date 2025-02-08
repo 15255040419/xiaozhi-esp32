@@ -48,6 +48,7 @@ private:
     size_t char_index_ = 0;        // 当前字符索引
     lv_timer_t* typewriter_timer_ = nullptr;
     static constexpr uint32_t TYPEWRITER_DELAY = 100;  // 打字间隔(ms)
+    int current_page_ = 0;  // 当前显示页码
 
 public:
     LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,

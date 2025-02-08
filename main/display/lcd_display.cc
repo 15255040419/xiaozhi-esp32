@@ -267,23 +267,20 @@ void LcdDisplay::SetupUI() {
     lv_label_set_text(emotion_label_, FONT_AWESOME_AI_CHIP);
     lv_obj_set_align(emotion_label_, LV_ALIGN_TOP_MID);
     lv_obj_set_y(emotion_label_, 50);
-    lv_obj_set_style_text_color(emotion_label_, lv_palette_main(LV_PALETTE_GREEN), 0);
+    lv_obj_set_style_text_color(emotion_label_, lv_color_white(), 0);
 
     // 聊天消息标签
     chat_message_label_ = lv_label_create(lv_scr_act());
-    lv_obj_set_width(chat_message_label_, LV_HOR_RES * 0.8);
+    lv_obj_set_width(chat_message_label_, LV_HOR_RES * 0.9);
+    // 设置最大高度限制
+    lv_obj_set_style_max_height(chat_message_label_, LV_VER_RES * 0.6, 0);
     lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(chat_message_label_, &font_dingding, 0);
-    lv_label_set_text(chat_message_label_, "AI聊天助手\n廖翎羽\nLIAO LING YU");
-    lv_obj_set_style_text_color(chat_message_label_, lv_palette_main(LV_PALETTE_GREEN), 0);
+    lv_label_set_text(chat_message_label_, "风中追蛇\nAI助手\nAI ASSISTANT");
+    lv_obj_set_style_text_color(chat_message_label_, lv_color_white(), 0);
     lv_obj_set_align(chat_message_label_, LV_ALIGN_BOTTOM_MID);
-    lv_obj_set_y(chat_message_label_, 10);  // 调整底部距离
-    lv_obj_set_height(chat_message_label_, 120);  // 设置标签的高度，根据需要调整数值
-
-    // 设置文本垂直居中对齐
-    lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_style_align(chat_message_label_, LV_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_y(chat_message_label_, -10);  // 调整底部距离
 
     // 状态栏内容
     lv_obj_set_flex_flow(status_bar_, LV_FLEX_FLOW_ROW_WRAP);
@@ -295,14 +292,14 @@ void LcdDisplay::SetupUI() {
     lv_label_set_text(network_label_, "");
     lv_obj_set_y(network_label_, 10);
     lv_obj_set_style_text_font(network_label_, &font_awesome_14_1, 0);
-    lv_obj_set_style_text_color(network_label_, lv_palette_main(LV_PALETTE_GREEN), 0);
+    lv_obj_set_style_text_color(network_label_, lv_color_white(), 0);
 
     // 通知标签
     notification_label_ = lv_label_create(status_bar_);
     lv_obj_set_flex_grow(notification_label_, 1);
     lv_obj_set_style_text_align(notification_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(notification_label_, &font_dingding, 0);
-    lv_obj_set_style_text_color(notification_label_, lv_palette_main(LV_PALETTE_GREEN), 0);
+    lv_obj_set_style_text_color(notification_label_, lv_color_white(), 0);
     lv_label_set_text(notification_label_, "通知");
     lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
 
@@ -312,7 +309,7 @@ void LcdDisplay::SetupUI() {
     lv_label_set_long_mode(status_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(status_label_, &font_dingding, 0);
-    lv_obj_set_style_text_color(status_label_, lv_palette_main(LV_PALETTE_GREEN), 0);
+    lv_obj_set_style_text_color(status_label_, lv_color_white(), 0);
     lv_label_set_text(status_label_, "正在初始化");
 
     // 电池图标
@@ -326,7 +323,7 @@ void LcdDisplay::SetupUI() {
     mute_label_ = lv_label_create(status_bar_);
     lv_label_set_text(mute_label_, "");
     lv_obj_set_style_text_font(mute_label_, &font_awesome_14_1, 0);
-    lv_obj_set_style_text_color(mute_label_, lv_palette_main(LV_PALETTE_GREEN), 0);
+    lv_obj_set_style_text_color(mute_label_, lv_color_white(), 0);
 }
 
 void LcdDisplay::SetChatMessage(const std::string &role, const std::string &content) {
@@ -353,6 +350,7 @@ void LcdDisplay::SetChatMessage(const std::string &role, const std::string &cont
     full_message_ = display_text;
     current_message_ = "";
     char_index_ = 0;
+    current_page_ = 0;  // 添加页面计数器
     
     // 删除旧的定时器
     if (typewriter_timer_) {
@@ -370,7 +368,19 @@ void LcdDisplay::TypewriterTimerCb(lv_timer_t* timer) {
 
 void LcdDisplay::UpdateTypewriterText() {
     if (char_index_ >= full_message_.length()) {
-        // 完成打字，删除定时器
+        // 检查是否还有更多内容需要显示
+        lv_coord_t height = lv_obj_get_height(chat_message_label_);
+        lv_coord_t max_height = lv_obj_get_style_max_height(chat_message_label_, 0);
+        
+        if (height > max_height) {
+            // 需要显示下一页
+            current_page_++;
+            current_message_ = "";  // 清空当前显示
+            char_index_ = current_page_ * max_height;  // 近似计算下一页起始位置
+            return;  // 继续定时器
+        }
+        
+        // 所有内容都显示完毕
         lv_timer_del(typewriter_timer_);
         typewriter_timer_ = nullptr;
         return;
