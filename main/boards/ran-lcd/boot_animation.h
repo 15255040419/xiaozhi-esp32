@@ -24,7 +24,8 @@ public:
     
     // 显示开机动画
     void Show(const char* logo_text = "方便面的工作室", 
-              const char* version_text = "v1.0.0", 
+              const char* subtitle_text = "FANG BIAN MIAN", 
+              const char* version_text = "v1.4.7", 
               uint32_t duration_ms = 2000);
     
     // 隐藏开机动画

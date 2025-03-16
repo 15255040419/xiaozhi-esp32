@@ -11,7 +11,7 @@ BootAnimation::~BootAnimation() {
     Hide();
 }
 
-void BootAnimation::Show(const char* logo_text, const char* version_text, uint32_t duration_ms) {
+void BootAnimation::Show(const char* logo_text, const char* subtitle_text, const char* version_text, uint32_t duration_ms) {
     // 如果已经存在，先删除旧的
     if (splash_screen_ != nullptr) {
         Hide();
@@ -25,26 +25,40 @@ void BootAnimation::Show(const char* logo_text, const char* version_text, uint32
     lv_obj_set_style_radius(splash_screen_, 0, 0);
     lv_obj_clear_flag(splash_screen_, LV_OBJ_FLAG_SCROLLABLE);
     
-    // 创建标志
+    // 创建标题标签
     logo_label_ = lv_label_create(splash_screen_);
     lv_obj_set_style_text_font(logo_label_, font_large_, 0);
     lv_obj_set_style_text_color(logo_label_, lv_color_white(), 0);
-    lv_label_set_text(logo_label_, logo_text);
+    lv_obj_set_style_text_align(logo_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(logo_label_, LV_ALIGN_CENTER, 0, -40);
+    
+    // 创建副标题标签
+    lv_obj_t* subtitle_label = lv_label_create(splash_screen_);
+    lv_obj_set_style_text_font(subtitle_label, font_small_, 0);
+    lv_obj_set_style_text_color(subtitle_label, lv_color_white(), 0);
+    lv_obj_set_style_text_align(subtitle_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(subtitle_label, subtitle_text);
+    lv_obj_align(subtitle_label, LV_ALIGN_CENTER, 0, 0);
     
     // 创建版本标签
     version_label_ = lv_label_create(splash_screen_);
     lv_obj_set_style_text_font(version_label_, font_small_, 0);
     lv_obj_set_style_text_color(version_label_, lv_color_white(), 0);
-    lv_label_set_text(version_label_, version_text);
-    lv_obj_align(version_label_, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align(version_label_, LV_ALIGN_BOTTOM_RIGHT, -10, -10);
     
     // 创建进度条
     progress_bar_ = lv_bar_create(splash_screen_);
     lv_obj_set_size(progress_bar_, 200, 10);
-    lv_obj_align(progress_bar_, LV_ALIGN_CENTER, 0, 40);
+    lv_obj_align(progress_bar_, LV_ALIGN_BOTTOM_MID, 0, -40);
     lv_bar_set_range(progress_bar_, 0, 100);
     lv_bar_set_value(progress_bar_, 0, LV_ANIM_OFF);
+    
+    // 设置文本
+    lv_label_set_text(logo_label_, logo_text);
+    lv_label_set_text(version_label_, version_text);
+    
+    // 显示启动画面
+    lv_obj_clear_flag(splash_screen_, LV_OBJ_FLAG_HIDDEN);
     
     // 创建进度条动画
     lv_anim_t a;

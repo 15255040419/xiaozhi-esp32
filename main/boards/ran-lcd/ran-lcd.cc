@@ -166,7 +166,7 @@ private:
             .emoji_font = font_emoji_64_init(),
         });
         boot_animation_ = new BootAnimation(&font_puhui_20_4, &font_puhui_20_4);
-        boot_animation_->Show("方便面的工作室", "v1.0.0", 2000);
+        boot_animation_->Show("方便面的工作室", "FANG BIAN MIAN", "v1.4.7", 2000);
     }
 
     void InitializeIot() {
