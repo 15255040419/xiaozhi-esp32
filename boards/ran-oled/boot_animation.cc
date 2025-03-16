@@ -14,16 +14,16 @@ BootAnimation::BootAnimation(lv_obj_t* parent) : parent_(parent) {
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_radius(container_, 0, 0);
     
-    // 创建logo
+    // 创建logo (对于OLED可能需要调整)
     logo_ = lv_img_create(container_);
     // 设置logo图片，这里假设您有一个logo图片
     // lv_img_set_src(logo_, &your_logo);
-    lv_obj_align(logo_, LV_ALIGN_CENTER, 0, -20);
+    lv_obj_align(logo_, LV_ALIGN_CENTER, 0, -10);
     
     // 创建进度条
     progress_bar_ = lv_bar_create(container_);
-    lv_obj_set_size(progress_bar_, lv_pct(60), 10);
-    lv_obj_align(progress_bar_, LV_ALIGN_CENTER, 0, 40);
+    lv_obj_set_size(progress_bar_, lv_pct(60), 8);
+    lv_obj_align(progress_bar_, LV_ALIGN_CENTER, 0, 20);
     lv_bar_set_range(progress_bar_, 0, 100);
     lv_bar_set_value(progress_bar_, 0, LV_ANIM_OFF);
     
