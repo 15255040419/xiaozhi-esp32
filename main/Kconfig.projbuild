@@ -149,7 +149,9 @@ choice BOARD_TYPE
     config BOARD_TYPE_SENSECAP_WATCHER
         bool "SenseCAP Watcher"
     config BOARD_TYPE_RAN_LCD
-        bool "方便面的工作室"
+        bool "方便面的工作室LCD"
+    config BOARD_TYPE_RAN_OLED
+        bool "方便面的工作室OLED"
 endchoice
 
 choice DISPLAY_OLED_TYPE

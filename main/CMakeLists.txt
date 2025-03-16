@@ -128,6 +128,8 @@ elseif(CONFIG_BOARD_TYPE_ESP32_CGC)
     set(BOARD_TYPE "esp32-cgc")  
 elseif(CONFIG_BOARD_TYPE_RAN_LCD)
     set(BOARD_TYPE "ran-lcd")
+elseif(CONFIG_BOARD_TYPE_RAN_OLED)
+    set(BOARD_TYPE "ran-oled")
 endif()
 file(GLOB BOARD_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_TYPE}/*.cc
@@ -203,4 +205,15 @@ add_custom_command(
 # 强制建立生成依赖
 add_custom_target(lang_header ALL
     DEPENDS ${LANG_HEADER}
+)
+
+# 在现有的 BOARD_SOURCES 列表中添加新的机型
+set(BOARD_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_TYPE}/*.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_TYPE}/*.c
+    boards/ran-lcd/ran-lcd.cc
+    boards/ran-lcd/boot_animation.cc
+    # 添加新的机型
+    boards/ran-oled/ran-oled.cc
+    boards/ran-oled/boot_animation.cc
 )
