@@ -33,8 +33,17 @@ protected:
     
 public:
     ~LcdDisplay();
-    virtual void SetEmotion(const char* emotion) override;
-    virtual void SetIcon(const char* icon) override;
+    
+    // 在LCD显示器中覆盖这些方法为空实现
+    virtual void SetEmotion(const char* emotion) override {}
+    virtual void SetIcon(const char* icon) override {}
+    
+#if CONFIG_USE_WECHAT_MESSAGE_STYLE
+    virtual void SetChatMessage(const char* role, const char* content) override;
+#endif
+
+    // 获取内容容器，用于添加自定义内容
+    virtual lv_obj_t* GetContentContainer() { return content_; }
 };
 
 // RGB LCD显示器

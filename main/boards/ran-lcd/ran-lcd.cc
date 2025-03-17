@@ -163,10 +163,13 @@ private:
         {
             .text_font = &font_puhui_20_4,
             .icon_font = &font_awesome_20_4,
-            .emoji_font = font_emoji_64_init(),
+            .emoji_font = &font_awesome_20_4,
         });
+        
+#if CONFIG_USE_BOOT_ANIMATION
         boot_animation_ = new BootAnimation(&font_puhui_20_4, &font_puhui_20_4);
         boot_animation_->Show("方便面的工作室", "FANG BIAN MIAN", "v1.4.7", 2000);
+#endif
     }
 
     void InitializeIot() {

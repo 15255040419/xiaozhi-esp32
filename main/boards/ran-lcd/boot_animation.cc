@@ -3,6 +3,9 @@
 
 #define TAG "BootAnimation"
 
+// 添加静态变量跟踪动画是否已播放
+bool BootAnimation::animation_played_ = false;
+
 BootAnimation::BootAnimation(const lv_font_t* font_large, const lv_font_t* font_small)
     : font_large_(font_large), font_small_(font_small) {
 }
@@ -12,6 +15,12 @@ BootAnimation::~BootAnimation() {
 }
 
 void BootAnimation::Show(const char* logo_text, const char* subtitle_text, const char* version_text, uint32_t duration_ms) {
+    // 检查动画是否已经播放过
+    if (animation_played_) {
+        ESP_LOGI(TAG, "Boot animation already played, skipping");
+        return;
+    }
+    
     // 如果已经存在，先删除旧的
     if (splash_screen_ != nullptr) {
         Hide();
@@ -77,6 +86,9 @@ void BootAnimation::Show(const char* logo_text, const char* subtitle_text, const
     
     // 启动动画
     lv_anim_start(&a);
+    
+    // 标记动画已播放
+    animation_played_ = true;
     
     ESP_LOGI(TAG, "Boot animation started");
 }

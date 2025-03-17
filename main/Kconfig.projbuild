@@ -229,4 +229,16 @@ config USE_WAKE_WORD_DETECT
     depends on IDF_TARGET_ESP32S3 && USE_AFE
     help
         需要 ESP32 S3 与 AFE 支持
+
+config USE_WECHAT_MESSAGE_STYLE
+    bool "使用微信聊天界面风格"
+    default n
+    help
+        使用微信聊天界面风格
+
+config USE_BOOT_ANIMATION
+    bool "启用开机动画"
+    default y
+    help
+        启用开机动画
 endmenu

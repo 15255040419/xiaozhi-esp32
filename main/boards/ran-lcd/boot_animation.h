@@ -12,6 +12,9 @@ private:
     const lv_font_t* font_large_ = nullptr;
     const lv_font_t* font_small_ = nullptr;
     
+    // 添加静态标志，跟踪动画是否已执行过
+    static bool animation_played_;
+    
     // 动画完成回调
     static void AnimationFinished(lv_anim_t* anim);
     
