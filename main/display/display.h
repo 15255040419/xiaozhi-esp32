@@ -29,6 +29,9 @@ public:
     inline int width() const { return width_; }
     inline int height() const { return height_; }
 
+    // 默认不支持时钟
+    virtual void ShowCenterClock(bool show) {}
+
 protected:
     int width_ = 0;
     int height_ = 0;

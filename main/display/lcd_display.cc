@@ -18,6 +18,8 @@
 #endif
 
 LV_FONT_DECLARE(font_awesome_30_4);
+LV_FONT_DECLARE(font_puhui_30_4);
+LV_FONT_DECLARE(font_puhui_20_4);
 
 SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
                            int width, int height, int offset_x, int offset_y, bool mirror_x, bool mirror_y, bool swap_xy,
@@ -368,6 +370,133 @@ void LcdDisplay::SetupUI() {
     lv_obj_center(low_battery_label);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
 #endif
+
+    // 创建时钟容器
+    clock_container_ = lv_obj_create(content_);
+    lv_obj_set_size(clock_container_, LV_HOR_RES, LV_VER_RES * 0.6);
+    lv_obj_set_style_bg_color(clock_container_, lv_color_black(), 0);
+    lv_obj_set_style_border_width(clock_container_, 0, 0);
+    lv_obj_set_style_pad_all(clock_container_, 0, 0);
+    lv_obj_center(clock_container_);
+    lv_obj_add_flag(clock_container_, LV_OBJ_FLAG_HIDDEN); // 初始隐藏
+    
+    // 创建时间标签 - 使用蒲黑20字体
+    time_label_ = lv_label_create(clock_container_);
+    lv_obj_set_style_text_font(time_label_, &font_puhui_20_4, 0); // 使用蒲黑20字体
+    lv_obj_set_style_text_color(time_label_, lv_color_white(), 0);
+    lv_obj_center(time_label_);
+    
+    // 创建日期标签
+    date_label_ = lv_label_create(clock_container_);
+    lv_obj_set_style_text_font(date_label_, &font_puhui_20_4, 0); // 也使用蒲黑20字体
+    lv_obj_set_style_text_color(date_label_, lv_color_white(), 0);
+    lv_obj_align(date_label_, LV_ALIGN_CENTER, 0, 30);
+    
+    // 创建时钟定时器
+    esp_timer_create_args_t timer_args = {
+        .callback = &LcdDisplay::ClockTimerCallback,
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "clock_timer",
+        .skip_unhandled_events = true
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&timer_args, &clock_timer_));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(clock_timer_, 1000000)); // 每秒更新一次
+}
+
+void LcdDisplay::ClockTimerCallback(void* arg) {
+    LcdDisplay* display = static_cast<LcdDisplay*>(arg);
+    if (display) {
+        display->UpdateClock();
+    }
+}
+
+void LcdDisplay::UpdateClock() {
+    if (!time_label_ || !date_label_ || 
+        lv_obj_has_flag(clock_container_, LV_OBJ_FLAG_HIDDEN)) {
+        return;
+    }
+    
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    
+    static int last_min = -1;
+    if (timeinfo.tm_min != last_min) {
+        last_min = timeinfo.tm_min;
+        
+        char time_str[16];
+        snprintf(time_str, sizeof(time_str), "%02d:%02d", 
+                timeinfo.tm_hour, timeinfo.tm_min);
+        
+        DisplayLockGuard lock(this);
+        lv_label_set_text(time_label_, time_str);
+        
+        // 每天更新一次日期
+        static int last_day = -1;
+        if (timeinfo.tm_mday != last_day) {
+            last_day = timeinfo.tm_mday;
+            
+            char date_str[32];
+            snprintf(date_str, sizeof(date_str), "%04d-%02d-%02d", 
+                    timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
+            
+            lv_label_set_text(date_label_, date_str);
+        }
+    }
+}
+
+void LcdDisplay::ShowCenterClock(bool show) {
+    if (!clock_container_) {
+        return;
+    }
+    
+    DisplayLockGuard lock(this);
+    if (show) {
+        // 更新时间和日期
+        time_t now;
+        struct tm timeinfo;
+        time(&now);
+        localtime_r(&now, &timeinfo);
+        
+        char time_str[16];
+        char date_str[32];
+        
+        snprintf(time_str, sizeof(time_str), "%02d:%02d", 
+                timeinfo.tm_hour, timeinfo.tm_min);
+        
+        snprintf(date_str, sizeof(date_str), "%04d-%02d-%02d", 
+                timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
+        
+        lv_label_set_text(time_label_, time_str);
+        lv_label_set_text(date_label_, date_str);
+        
+        // 显示时钟
+        lv_obj_clear_flag(clock_container_, LV_OBJ_FLAG_HIDDEN);
+        
+        // 清除聊天消息
+#if CONFIG_USE_WECHAT_MESSAGE_STYLE
+        // 删除所有聊天消息
+        if (content_) {
+            uint32_t child_count = lv_obj_get_child_cnt(content_);
+            for (int i = child_count - 1; i >= 0; i--) {
+                lv_obj_t* child = lv_obj_get_child(content_, i);
+                if (child != clock_container_) {
+                    lv_obj_del(child);
+                }
+            }
+        }
+#else
+        // 清除普通聊天消息
+        if (chat_message_label_) {
+            lv_label_set_text(chat_message_label_, "");
+        }
+#endif
+    } else {
+        // 隐藏时钟
+        lv_obj_add_flag(clock_container_, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 #if CONFIG_USE_WECHAT_MESSAGE_STYLE

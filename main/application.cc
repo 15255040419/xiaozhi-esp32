@@ -727,7 +727,6 @@ void Application::SetDeviceState(DeviceState state) {
     background_task_->WaitForCompletion();
 
     auto& board = Board::GetInstance();
-    auto codec = board.GetAudioCodec();
     auto display = board.GetDisplay();
     auto led = board.GetLed();
     led->OnStateChanged();
@@ -739,6 +738,7 @@ void Application::SetDeviceState(DeviceState state) {
 #if CONFIG_USE_AUDIO_PROCESSOR
             audio_processor_.Stop();
 #endif
+            display->ShowCenterClock(true);
             break;
         case kDeviceStateConnecting:
             display->SetStatus(Lang::Strings::CONNECTING);
@@ -758,14 +758,16 @@ void Application::SetDeviceState(DeviceState state) {
                 // FIXME: Wait for the speaker to empty the buffer
                 vTaskDelay(pdMS_TO_TICKS(120));
             }
+            display->ShowCenterClock(false);
             break;
         case kDeviceStateSpeaking:
             display->SetStatus(Lang::Strings::SPEAKING);
             ResetDecoder();
-            codec->EnableOutput(true);
+            board.GetAudioCodec()->EnableOutput(true);
 #if CONFIG_USE_AUDIO_PROCESSOR
             audio_processor_.Stop();
 #endif
+            display->ShowCenterClock(false);
             break;
         default:
             // Do nothing

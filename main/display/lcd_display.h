@@ -22,6 +22,16 @@ protected:
 
     DisplayFonts fonts_;
 
+    // 添加时钟相关成员
+    lv_obj_t* clock_container_ = nullptr;
+    lv_obj_t* time_label_ = nullptr;
+    lv_obj_t* date_label_ = nullptr;
+    esp_timer_handle_t clock_timer_ = nullptr;
+    
+    // 时钟更新方法
+    static void ClockTimerCallback(void* arg);
+    void UpdateClock();
+
     virtual void SetupUI();
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
@@ -44,6 +54,9 @@ public:
 
     // 获取内容容器，用于添加自定义内容
     virtual lv_obj_t* GetContentContainer() { return content_; }
+
+    // 添加显示/隐藏时钟的方法
+    void ShowCenterClock(bool show);
 };
 
 // RGB LCD显示器
