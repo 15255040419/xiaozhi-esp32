@@ -311,7 +311,7 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_border_width(content_, 0, 0); // 移除边框
     lv_obj_set_width(content_, LV_HOR_RES);
     lv_obj_set_flex_grow(content_, 1);
-    lv_obj_set_style_bg_color(content_, lv_color_hex(0x000000), 0); // 黑色背景
+    lv_obj_set_style_bg_color(content_, lv_color_hex(0x000000), 0); // 黑色
 
     lv_obj_set_flex_flow(content_, LV_FLEX_FLOW_COLUMN); // 垂直布局（从上到下）
     lv_obj_set_flex_align(content_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_SPACE_EVENLY); // 子对象居中对齐，等距分布
