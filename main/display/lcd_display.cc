@@ -844,6 +844,19 @@ void LcdDisplay::SetTheme(const std::string& theme_name) {
         lv_obj_set_style_bg_color(content_, current_theme.chat_background, 0);
         lv_obj_set_style_border_color(content_, current_theme.border, 0);
         
+        // 更新欢迎容器的颜色
+        if (welcome_container_ != nullptr) {
+            lv_obj_set_style_bg_color(welcome_container_, current_theme.chat_background, 0);
+            
+            // 更新欢迎标签的文本颜色
+            if (lv_obj_get_child_cnt(welcome_container_) > 0) {
+                lv_obj_t* welcome_label = lv_obj_get_child(welcome_container_, 0);
+                if (welcome_label != nullptr) {
+                    lv_obj_set_style_text_color(welcome_label, current_theme.text, 0);
+                }
+            }
+        }
+        
         // If we have the chat message style, update all message bubbles
 #if CONFIG_USE_WECHAT_MESSAGE_STYLE
         // Iterate through all children of content (message containers or bubbles)
