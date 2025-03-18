@@ -390,7 +390,7 @@ void LcdDisplay::SetupUI() {
     lv_obj_t* welcome_label = lv_label_create(welcome_container_);
     lv_obj_set_style_text_font(welcome_label, fonts_.text_font, 0);
     lv_obj_set_style_text_color(welcome_label, current_theme.text, 0);
-    lv_label_set_text(welcome_label, "方便面工作室\nFANGBIANMIAN");
+    lv_label_set_text(welcome_label, "方便面的工作室\nFANG BIAN MIAN");
     lv_obj_set_style_text_align(welcome_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(welcome_label, LV_HOR_RES - 20);
     lv_obj_center(welcome_label);
