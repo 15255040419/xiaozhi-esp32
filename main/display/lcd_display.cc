@@ -81,6 +81,7 @@ static std::string current_theme_name = "light";
 
 
 LV_FONT_DECLARE(font_awesome_30_4);
+LV_FONT_DECLARE(font_dingding);
 
 SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
                            int width, int height, int offset_x, int offset_y, bool mirror_x, bool mirror_y, bool swap_xy,
@@ -388,7 +389,7 @@ void LcdDisplay::SetupUI() {
     
     // 创建欢迎信息标签
     lv_obj_t* welcome_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(welcome_label, fonts_.text_font, 0);
+    lv_obj_set_style_text_font(welcome_label, &font_dingding, 0);
     lv_obj_set_style_text_color(welcome_label, current_theme.text, 0);
     lv_label_set_text(welcome_label, "方便面的工作室\nFANG BIAN MIAN");
     lv_obj_set_style_text_align(welcome_label, LV_TEXT_ALIGN_CENTER, 0);
@@ -692,9 +693,9 @@ void LcdDisplay::SetupUI() {
     
     // 创建欢迎信息标签
     lv_obj_t* welcome_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(welcome_label, fonts_.text_font, 0);
+    lv_obj_set_style_text_font(welcome_label, &font_dingding, 0);
     lv_obj_set_style_text_color(welcome_label, current_theme.text, 0);
-    lv_label_set_text(welcome_label, "方便面工作室\nFANGBIANMIAN");
+    lv_label_set_text(welcome_label, "方便面的工作室❤️\nFANG BIAN MIAN");
     lv_obj_set_style_text_align(welcome_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(welcome_label, LV_HOR_RES - 20);
     lv_obj_center(welcome_label);
