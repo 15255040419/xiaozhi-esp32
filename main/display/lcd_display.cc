@@ -376,17 +376,52 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_color(low_battery_label, lv_color_white(), 0);
     lv_obj_center(low_battery_label);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
+
+    // 创建欢迎容器 - 放在与content_相同的位置
+    welcome_container_ = lv_obj_create(container_);
+    lv_obj_set_style_radius(welcome_container_, 0, 0);
+    lv_obj_set_width(welcome_container_, LV_HOR_RES);
+    lv_obj_set_flex_grow(welcome_container_, 1); // 与content_一样占用剩余空间
+    lv_obj_set_style_pad_all(welcome_container_, 5, 0);
+    lv_obj_set_style_bg_color(welcome_container_, current_theme.chat_background, 0);
+    lv_obj_set_style_border_width(welcome_container_, 0, 0); // 移除边框
+    
+    // 创建欢迎信息标签
+    lv_obj_t* welcome_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(welcome_label, fonts_.text_font, 0);
+    lv_obj_set_style_text_color(welcome_label, current_theme.text, 0);
+    lv_label_set_text(welcome_label, "方便面工作室\nFANGBIANMIAN");
+    lv_obj_set_style_text_align(welcome_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(welcome_label, LV_HOR_RES - 20);
+    lv_obj_center(welcome_label);
+    
+    // 初始时显示欢迎界面，隐藏聊天界面
+    lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(content_, LV_OBJ_FLAG_HIDDEN); // 只隐藏聊天区域，不隐藏整个container_
 }
 
 #define  MAX_MESSAGES 50
 void LcdDisplay::SetChatMessage(const char* role, const char* content) {
     DisplayLockGuard lock(this);
-    if (content_ == nullptr) {
-        return;
-    }
     
-    //避免出现空的消息框
-    if(strlen(content) == 0) return;
+    // 如果有消息内容，隐藏欢迎界面，显示聊天界面
+    if (content && strlen(content) > 0) {
+        if (welcome_container_ != nullptr) {
+            lv_obj_add_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (content_ != nullptr) {
+            lv_obj_clear_flag(content_, LV_OBJ_FLAG_HIDDEN);
+        }
+    } else {
+        // 如果没有消息内容，显示欢迎界面，隐藏聊天界面
+        if (welcome_container_ != nullptr) {
+            lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (content_ != nullptr) {
+            lv_obj_add_flag(content_, LV_OBJ_FLAG_HIDDEN);
+        }
+        return; // 避免创建空消息框
+    }
     
     // Create a message bubble
     lv_obj_t* msg_bubble = lv_obj_create(content_);
@@ -645,6 +680,28 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_color(low_battery_label, lv_color_white(), 0);
     lv_obj_center(low_battery_label);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
+
+    // 创建欢迎容器 - 放在与content_相同的位置
+    welcome_container_ = lv_obj_create(container_);
+    lv_obj_set_style_radius(welcome_container_, 0, 0);
+    lv_obj_set_width(welcome_container_, LV_HOR_RES);
+    lv_obj_set_flex_grow(welcome_container_, 1); // 与content_一样占用剩余空间
+    lv_obj_set_style_pad_all(welcome_container_, 5, 0);
+    lv_obj_set_style_bg_color(welcome_container_, current_theme.chat_background, 0);
+    lv_obj_set_style_border_width(welcome_container_, 0, 0); // 移除边框
+    
+    // 创建欢迎信息标签
+    lv_obj_t* welcome_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(welcome_label, fonts_.text_font, 0);
+    lv_obj_set_style_text_color(welcome_label, current_theme.text, 0);
+    lv_label_set_text(welcome_label, "方便面工作室\nFANGBIANMIAN");
+    lv_obj_set_style_text_align(welcome_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(welcome_label, LV_HOR_RES - 20);
+    lv_obj_center(welcome_label);
+    
+    // 初始时显示欢迎界面，隐藏聊天界面
+    lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(content_, LV_OBJ_FLAG_HIDDEN); // 只隐藏聊天区域，不隐藏整个container_
 }
 #endif
 
