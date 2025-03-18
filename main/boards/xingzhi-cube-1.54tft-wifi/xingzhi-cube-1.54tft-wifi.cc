@@ -159,8 +159,12 @@ private:
         {
             .text_font = &font_puhui_20_4,
             .icon_font = &font_awesome_20_4,
-            .emoji_font = font_emoji_64_init(),
-        });
+#if CONFIG_USE_WECHAT_MESSAGE_STYLE
+                                        .emoji_font = font_emoji_32_init(),
+#else
+                                        .emoji_font = font_emoji_64_init(),
+#endif
+                                    });
     }
 
     void InitializeIot() {
@@ -168,6 +172,7 @@ private:
         thing_manager.AddThing(iot::CreateThing("Speaker"));
         thing_manager.AddThing(iot::CreateThing("Backlight"));
         thing_manager.AddThing(iot::CreateThing("Battery"));
+        thing_manager.AddThing(iot::CreateThing("Screen"));
     }
 
 public:

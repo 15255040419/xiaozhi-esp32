@@ -14,14 +14,14 @@
 #define TAG "LcdDisplay"
 
 // Color definitions for dark theme
-#define DARK_BACKGROUND_COLOR       lv_color_hex(0x121212)     // Dark background
+#define DARK_BACKGROUND_COLOR       lv_color_hex(0x000000)     // 纯黑色背景
 #define DARK_TEXT_COLOR             lv_color_white()           // White text
-#define DARK_CHAT_BACKGROUND_COLOR  lv_color_hex(0x1E1E1E)     // Slightly lighter than background
+#define DARK_CHAT_BACKGROUND_COLOR  lv_color_hex(0x000000)     // 聊天区域也使用纯黑色背景
 #define DARK_USER_BUBBLE_COLOR      lv_color_hex(0x1A6C37)     // Dark green
 #define DARK_ASSISTANT_BUBBLE_COLOR lv_color_hex(0x333333)     // Dark gray
 #define DARK_SYSTEM_BUBBLE_COLOR    lv_color_hex(0x2A2A2A)     // Medium gray
 #define DARK_SYSTEM_TEXT_COLOR      lv_color_hex(0xAAAAAA)     // Light gray text
-#define DARK_BORDER_COLOR           lv_color_hex(0x333333)     // Dark gray border
+#define DARK_BORDER_COLOR           lv_color_hex(0x000000)     // 纯黑色边框，与背景相同
 #define DARK_LOW_BATTERY_COLOR      lv_color_hex(0xFF0000)     // Red for dark mode
 
 // Color definitions for light theme
@@ -304,8 +304,10 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_flex_grow(content_, 1);
     lv_obj_set_style_pad_all(content_, 5, 0);
     lv_obj_set_style_bg_color(content_, current_theme.chat_background, 0); // Background for chat area
-    lv_obj_set_style_border_color(content_, current_theme.border, 0); // Border color for chat area
-
+    
+    // 使用方案2: 边框颜色与背景相同
+    lv_obj_set_style_border_color(content_, current_theme.chat_background, 0);
+    
     // Enable scrolling for chat content
     lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_scroll_dir(content_, LV_DIR_VER);
@@ -676,15 +678,23 @@ void LcdDisplay::SetEmotion(const char* emotion) {
         {"🙄", "confused"}
     };
     
-    // 查找匹配的表情
-    std::string_view emotion_view(emotion);
-    auto it = std::find_if(emotions.begin(), emotions.end(),
-        [&emotion_view](const Emotion& e) { return e.text == emotion_view; });
-
     DisplayLockGuard lock(this);
     if (emotion_label_ == nullptr) {
         return;
     }
+
+#if CONFIG_USE_WECHAT_MESSAGE_STYLE
+    // 在微信聊天模式下隐藏表情
+    lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
+    return;
+#else
+    // 在非微信聊天模式下显示表情
+    lv_obj_clear_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
+    
+    // 查找匹配的表情
+    std::string_view emotion_view(emotion);
+    auto it = std::find_if(emotions.begin(), emotions.end(),
+        [&emotion_view](const Emotion& e) { return e.text == emotion_view; });
 
     // 如果找到匹配的表情就显示对应图标，否则显示默认的neutral表情
     lv_obj_set_style_text_font(emotion_label_, fonts_.emoji_font, 0);
@@ -693,6 +703,7 @@ void LcdDisplay::SetEmotion(const char* emotion) {
     } else {
         lv_label_set_text(emotion_label_, "😶");
     }
+#endif
 }
 
 void LcdDisplay::SetIcon(const char* icon) {
@@ -700,8 +711,17 @@ void LcdDisplay::SetIcon(const char* icon) {
     if (emotion_label_ == nullptr) {
         return;
     }
+    
+#if CONFIG_USE_WECHAT_MESSAGE_STYLE
+    // 在微信聊天模式下隐藏图标
+    lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
+    return;
+#else
+    // 在非微信聊天模式下显示图标
+    lv_obj_clear_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_style_text_font(emotion_label_, &font_awesome_30_4, 0);
     lv_label_set_text(emotion_label_, icon);
+#endif
 }
 
 void LcdDisplay::SetTheme(const std::string& theme_name) {
