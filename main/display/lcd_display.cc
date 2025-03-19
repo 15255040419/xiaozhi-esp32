@@ -90,8 +90,8 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
     width_ = width;
     height_ = height;
 
-    // draw white
-    std::vector<uint16_t> buffer(width_, 0xFFFF);
+    // draw black
+    std::vector<uint16_t> buffer(width_, 0x0000);
     for (int y = 0; y < height_; y++) {
         esp_lcd_panel_draw_bitmap(panel_, 0, y, width_, y + 1, buffer.data());
     }
@@ -170,8 +170,8 @@ RgbLcdDisplay::RgbLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
     width_ = width;
     height_ = height;
     
-    // draw white
-    std::vector<uint16_t> buffer(width_, 0xFFFF);
+    // draw black
+    std::vector<uint16_t> buffer(width_, 0x0000);
     for (int y = 0; y < height_; y++) {
         esp_lcd_panel_draw_bitmap(panel_, 0, y, width_, y + 1, buffer.data());
     }
