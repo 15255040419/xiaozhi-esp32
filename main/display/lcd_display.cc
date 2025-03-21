@@ -75,7 +75,7 @@ static const ThemeColors LIGHT_THEME = {
 };
 
 // Current theme - initialize based on default config
-static ThemeColors current_theme = LIGHT_THEME;
+static ThemeColors current_theme = DARK_THEME;
 
 
 LV_FONT_DECLARE(font_awesome_30_4);
@@ -318,7 +318,14 @@ void LcdDisplay::SetupUI() {
     // 设置状态栏的内容垂直居中
     lv_obj_set_flex_align(status_bar_, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    // 创建emotion_label_在状态栏最左侧
+    // 创建network_label_在状态栏最左侧
+    network_label_ = lv_label_create(status_bar_);
+    lv_label_set_text(network_label_, "");
+    lv_obj_set_style_text_font(network_label_, fonts_.icon_font, 0);
+    lv_obj_set_style_text_color(network_label_, current_theme.text, 0);
+    lv_obj_set_style_margin_right(network_label_, 5, 0); // 添加右边距，与后面的元素分隔
+
+    // 创建emotion_label_在network_label_后面
     emotion_label_ = lv_label_create(status_bar_);
     lv_obj_set_style_text_font(emotion_label_, &font_awesome_30_4, 0);
     lv_obj_set_style_text_color(emotion_label_, current_theme.text, 0);
@@ -343,12 +350,7 @@ void LcdDisplay::SetupUI() {
     lv_label_set_text(mute_label_, "");
     lv_obj_set_style_text_font(mute_label_, fonts_.icon_font, 0);
     lv_obj_set_style_text_color(mute_label_, current_theme.text, 0);
-
-    network_label_ = lv_label_create(status_bar_);
-    lv_label_set_text(network_label_, "");
-    lv_obj_set_style_text_font(network_label_, fonts_.icon_font, 0);
-    lv_obj_set_style_text_color(network_label_, current_theme.text, 0);
-    lv_obj_set_style_margin_left(network_label_, 5, 0); // 添加左边距，与前面的元素分隔
+    lv_obj_set_style_margin_left(mute_label_, 5, 0); // 添加左边距，与前面的元素分隔
 
     battery_label_ = lv_label_create(status_bar_);
     lv_label_set_text(battery_label_, "");
