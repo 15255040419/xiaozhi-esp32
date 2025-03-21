@@ -17,7 +17,7 @@
 Display::Display() {
     // Load theme from settings
     Settings settings("display", false);
-    current_theme_name_ = settings.GetString("theme", "light");
+    current_theme_name_ = settings.GetString("theme", "dark");//默认深夜模式
 
     // Notification timer
     esp_timer_create_args_t notification_timer_args = {
