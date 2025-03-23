@@ -19,6 +19,7 @@ set(SOURCES "audio_codecs/audio_codec.cc"
             "background_task.cc"
             "main.cc"
             "font_dingding.c"
+            "font_time.c"
             )
 
 set(INCLUDE_DIRS "." "display" "audio_codecs" "protocols" "audio_processing")

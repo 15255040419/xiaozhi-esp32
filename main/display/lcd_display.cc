@@ -77,6 +77,8 @@ static const ThemeColors LIGHT_THEME = {
 // Current theme - initialize based on default config
 static ThemeColors current_theme = DARK_THEME;
 
+// 在文件开头添加外部字体声明
+LV_FONT_DECLARE(font_time);  // 使用 LVGL 的字体声明宏
 
 LV_FONT_DECLARE(font_awesome_30_4);
 LV_FONT_DECLARE(font_dingding);
@@ -225,6 +227,10 @@ RgbLcdDisplay::RgbLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
 }
 
 LcdDisplay::~LcdDisplay() {
+    if (clock_timer_ != nullptr) {
+        lv_timer_del(clock_timer_);
+        clock_timer_ = nullptr;
+    }
     // 然后再清理 LVGL 对象
     if (content_ != nullptr) {
         lv_obj_del(content_);
@@ -370,53 +376,90 @@ void LcdDisplay::SetupUI() {
     lv_obj_center(low_battery_label);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
 
-    // 创建欢迎容器 - 放在与content_相同的位置
+    // 创建聊天内容区域
+    content_ = lv_obj_create(container_);
+    lv_obj_set_size(content_, lv_obj_get_width(container_), lv_obj_get_height(container_));
+    lv_obj_set_style_bg_color(content_, current_theme.background, 0);
+    lv_obj_set_style_border_width(content_, 0, 0);
+    lv_obj_set_style_radius(content_, 0, 0);
+    lv_obj_set_style_pad_all(content_, 0, 0);
+    lv_obj_align_to(content_, status_bar_, LV_ALIGN_OUT_BOTTOM_MID, 0, 0);
+    lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_flex_flow(content_, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(content_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_scroll_dir(content_, LV_DIR_VER);
+    lv_obj_set_scroll_snap_y(content_, LV_SCROLL_SNAP_NONE);
+    // 初始时隐藏聊天界面
+    lv_obj_add_flag(content_, LV_OBJ_FLAG_HIDDEN);
+
+    // 创建时钟界面
     welcome_container_ = lv_obj_create(container_);
+    lv_obj_set_size(welcome_container_, lv_obj_get_width(container_), lv_obj_get_height(container_));
     lv_obj_set_style_radius(welcome_container_, 0, 0);
-    lv_obj_set_width(welcome_container_, LV_HOR_RES);
-    lv_obj_set_flex_grow(welcome_container_, 1); // 与content_一样占用剩余空间
-    lv_obj_set_style_pad_all(welcome_container_, 5, 0);
-    lv_obj_set_style_bg_color(welcome_container_, current_theme.chat_background, 0);
-    lv_obj_set_style_border_width(welcome_container_, 0, 0); // 移除边框
-    
-    // 创建提示文本标签（靠左显示）
-    lv_obj_t* hint_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(hint_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(hint_label, current_theme.text, 0);
-    lv_label_set_text(hint_label, "讯息:");
-    lv_obj_set_style_text_align(hint_label, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_width(hint_label, LV_HOR_RES - 20);
-    lv_obj_align(hint_label, LV_ALIGN_TOP_LEFT, 10, 20);  // 将y偏移从10改为30，让标签往下移动20个像素
-    
-    // 创建主欢迎信息标签
-    lv_obj_t* welcome_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(welcome_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(welcome_label, current_theme.text, 0);
-    lv_label_set_text(welcome_label, "有内鬼，终止交易");
-    lv_obj_set_style_text_align(welcome_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(welcome_label, LV_HOR_RES - 20);
-    lv_obj_align(welcome_label, LV_ALIGN_CENTER, 0, 0);  // 居中显示
-    
-    // 创建小字体的英文标签
-    lv_obj_t* sub_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(sub_label, fonts_.text_font, 0);  // 使用较小的字体
-    lv_obj_set_style_text_color(sub_label, current_theme.text, 0);
-    lv_label_set_text(sub_label, "FANG BIAN MIAN");
-    lv_obj_set_style_text_align(sub_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(sub_label, LV_HOR_RES - 20);
-    lv_obj_align(sub_label, LV_ALIGN_CENTER, 0, 30);  // 在主标签下方显示
-    
-    // 初始时显示欢迎界面，隐藏聊天界面
+    lv_obj_set_style_pad_all(welcome_container_, 0, 0);
+    lv_obj_set_style_bg_color(welcome_container_, current_theme.background, 0);
+    lv_obj_set_style_border_width(welcome_container_, 0, 0);
+    lv_obj_align_to(welcome_container_, status_bar_, LV_ALIGN_OUT_BOTTOM_MID, 0, 0);
+    lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_SCROLLABLE);
+    // 确保时钟界面显示
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(content_, LV_OBJ_FLAG_HIDDEN); // 只隐藏聊天区域，不隐藏整个container_
+    
+    // 创建时间标签 - 左侧显示大号时间
+    time_label_ = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(time_label_, &font_time, 0);  // 使用时间专用字体
+    lv_obj_set_style_text_color(time_label_, current_theme.text, 0);
+    lv_obj_align(time_label_, LV_ALIGN_TOP_MID, -80, 20);
+    
+    // 创建日期标签 - 右侧显示日期和星期
+    date_label_ = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(date_label_, fonts_.text_font, 0);  // 使用默认字体
+    lv_obj_set_style_text_color(date_label_, lv_color_white(), 0);  // 直接使用白色
+    lv_obj_set_style_text_align(date_label_, LV_TEXT_ALIGN_RIGHT, 0);  // 文本右对齐
+    lv_obj_align(date_label_, LV_ALIGN_TOP_RIGHT, -20, 20);  // 靠右对齐
+    
+    // 创建底部提示文本区域 - 类似聊天气泡的样式
+    lv_obj_t* hint_container = lv_obj_create(welcome_container_);
+    lv_obj_set_size(hint_container, lv_obj_get_width(welcome_container_) - 40, 80);
+    // 使用聊天气泡的样式
+    lv_obj_set_style_bg_color(hint_container, current_theme.assistant_bubble, 0);  // 使用助手气泡的颜色
+    lv_obj_set_style_radius(hint_container, 8, 0);  // 与聊天气泡相同的圆角
+    lv_obj_set_style_border_width(hint_container, 1, 0);
+    lv_obj_set_style_border_color(hint_container, current_theme.border, 0);
+    lv_obj_set_style_pad_all(hint_container, 8, 0);  // 与聊天气泡相同的内边距
+    lv_obj_set_style_shadow_width(hint_container, 10, 0);
+    lv_obj_set_style_shadow_opa(hint_container, LV_OPA_20, 0);
+    lv_obj_align(hint_container, LV_ALIGN_BOTTOM_MID, 0, -40);  // 从底部向上40像素
+    lv_obj_clear_flag(hint_container, LV_OBJ_FLAG_SCROLLABLE);
+    
+    // 创建提示文本标签
+    hint_label_ = lv_label_create(hint_container);
+    lv_obj_set_style_text_color(hint_label_, lv_color_white(), 0);  // 使用白色文本
+    lv_obj_set_style_text_font(hint_label_, fonts_.text_font, 0);
+    lv_label_set_text(hint_label_, "小智助手\n欢迎使用");
+    lv_obj_set_width(hint_label_, lv_obj_get_width(hint_container) - 16);  // 减去左右内边距
+    lv_obj_set_style_text_align(hint_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(hint_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_center(hint_label_);  // 在气泡内居中
+    
+    // 设置定时器更新时钟
+    clock_timer_ = lv_timer_create([](lv_timer_t* timer) {
+        LcdDisplay* display = static_cast<LcdDisplay*>(lv_timer_get_user_data(timer));
+        display->UpdateClockTime();
+        display->UpdateClockDate();
+    }, 1000, this);  // 每秒更新一次
+    
+    // 初始更新时钟
+    UpdateClockTime();
+    UpdateClockDate();
 }
 
 #define  MAX_MESSAGES 50
 void LcdDisplay::SetChatMessage(const char* role, const char* content) {
     DisplayLockGuard lock(this);
     
-    // 如果有消息内容，隐藏欢迎界面，显示聊天界面
+    // 如果有消息内容，隐藏时钟界面，显示聊天界面
     if (content && strlen(content) > 0) {
+        ESP_LOGI(TAG, "Showing chat interface");
         if (welcome_container_ != nullptr) {
             lv_obj_add_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
         }
@@ -424,7 +467,8 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
             lv_obj_clear_flag(content_, LV_OBJ_FLAG_HIDDEN);
         }
     } else {
-        // 如果没有消息内容，显示欢迎界面，隐藏聊天界面
+        ESP_LOGI(TAG, "Showing clock interface");
+        // 如果没有消息内容，显示时钟界面，隐藏聊天界面
         if (welcome_container_ != nullptr) {
             lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
         }
@@ -692,45 +736,81 @@ void LcdDisplay::SetupUI() {
     lv_obj_center(low_battery_label);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
 
-    // 创建欢迎容器 - 放在与content_相同的位置
+    // 创建聊天内容区域
+    content_ = lv_obj_create(container_);
+    lv_obj_set_size(content_, lv_obj_get_width(container_), lv_obj_get_height(container_));
+    lv_obj_set_style_bg_color(content_, current_theme.background, 0);
+    lv_obj_set_style_border_width(content_, 0, 0);
+    lv_obj_set_style_radius(content_, 0, 0);
+    lv_obj_set_style_pad_all(content_, 0, 0);
+    lv_obj_align_to(content_, status_bar_, LV_ALIGN_OUT_BOTTOM_MID, 0, 0);
+    lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_flex_flow(content_, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(content_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_scroll_dir(content_, LV_DIR_VER);
+    lv_obj_set_scroll_snap_y(content_, LV_SCROLL_SNAP_NONE);
+    // 初始时隐藏聊天界面
+    lv_obj_add_flag(content_, LV_OBJ_FLAG_HIDDEN);
+
+    // 创建时钟界面
     welcome_container_ = lv_obj_create(container_);
+    lv_obj_set_size(welcome_container_, lv_obj_get_width(container_), lv_obj_get_height(container_));
     lv_obj_set_style_radius(welcome_container_, 0, 0);
-    lv_obj_set_width(welcome_container_, LV_HOR_RES);
-    lv_obj_set_flex_grow(welcome_container_, 1);
-    lv_obj_set_style_pad_all(welcome_container_, 5, 0);
-    lv_obj_set_style_bg_color(welcome_container_, current_theme.chat_background, 0);
+    lv_obj_set_style_pad_all(welcome_container_, 0, 0);
+    lv_obj_set_style_bg_color(welcome_container_, current_theme.background, 0);
     lv_obj_set_style_border_width(welcome_container_, 0, 0);
-    
-    // 创建提示文本标签（靠左显示）
-    lv_obj_t* hint_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(hint_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(hint_label, current_theme.text, 0);
-    lv_label_set_text(hint_label, "讯息:");
-    lv_obj_set_style_text_align(hint_label, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_width(hint_label, LV_HOR_RES - 20);
-    lv_obj_align(hint_label, LV_ALIGN_TOP_LEFT, 10, 20);  // 将y偏移从10改为30，让标签往下移动20个像素
-    
-    // 创建主欢迎信息标签
-    lv_obj_t* welcome_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(welcome_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(welcome_label, current_theme.text, 0);
-    lv_label_set_text(welcome_label, "有内鬼，终止交易");
-    lv_obj_set_style_text_align(welcome_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(welcome_label, LV_HOR_RES - 20);
-    lv_obj_align(welcome_label, LV_ALIGN_CENTER, 0, 0);  // 居中显示
-    
-    // 创建小字体的英文标签
-    lv_obj_t* sub_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(sub_label, fonts_.text_font, 0);  // 使用较小的字体
-    lv_obj_set_style_text_color(sub_label, current_theme.text, 0);
-    lv_label_set_text(sub_label, "FANG BIAN MIAN");
-    lv_obj_set_style_text_align(sub_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(sub_label, LV_HOR_RES - 20);
-    lv_obj_align(sub_label, LV_ALIGN_CENTER, 0, 30);  // 在主标签下方显示
-    
-    // 初始时显示欢迎界面，隐藏聊天界面
+    lv_obj_align_to(welcome_container_, status_bar_, LV_ALIGN_OUT_BOTTOM_MID, 0, 0);
+    lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_SCROLLABLE);
+    // 确保时钟界面显示
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(content_, LV_OBJ_FLAG_HIDDEN); // 只隐藏聊天区域，不隐藏整个container_
+    
+    // 创建时间标签 - 左侧显示大号时间
+    time_label_ = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(time_label_, &font_time, 0);  // 使用时间专用字体
+    lv_obj_set_style_text_color(time_label_, current_theme.text, 0);
+    lv_obj_align(time_label_, LV_ALIGN_TOP_MID, -80, 20);
+    
+    // 创建日期标签 - 右侧显示日期和星期
+    date_label_ = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(date_label_, fonts_.text_font, 0);  // 使用默认字体
+    lv_obj_set_style_text_color(date_label_, lv_color_white(), 0);  // 直接使用白色
+    lv_obj_set_style_text_align(date_label_, LV_TEXT_ALIGN_RIGHT, 0);  // 文本右对齐
+    lv_obj_align(date_label_, LV_ALIGN_TOP_RIGHT, -20, 20);  // 靠右对齐
+    
+    // 创建底部提示文本区域 - 类似聊天气泡的样式
+    lv_obj_t* hint_container = lv_obj_create(welcome_container_);
+    lv_obj_set_size(hint_container, lv_obj_get_width(welcome_container_) - 40, 80);
+    // 使用聊天气泡的样式
+    lv_obj_set_style_bg_color(hint_container, current_theme.assistant_bubble, 0);  // 使用助手气泡的颜色
+    lv_obj_set_style_radius(hint_container, 8, 0);  // 与聊天气泡相同的圆角
+    lv_obj_set_style_border_width(hint_container, 1, 0);
+    lv_obj_set_style_border_color(hint_container, current_theme.border, 0);
+    lv_obj_set_style_pad_all(hint_container, 8, 0);  // 与聊天气泡相同的内边距
+    lv_obj_set_style_shadow_width(hint_container, 10, 0);
+    lv_obj_set_style_shadow_opa(hint_container, LV_OPA_20, 0);
+    lv_obj_align(hint_container, LV_ALIGN_BOTTOM_MID, 0, -30);  // 从底部向上30像素
+    lv_obj_clear_flag(hint_container, LV_OBJ_FLAG_SCROLLABLE);
+    
+    // 创建提示文本标签
+    hint_label_ = lv_label_create(hint_container);
+    lv_obj_set_style_text_color(hint_label_, lv_color_white(), 0);  // 使用白色文本
+    lv_obj_set_style_text_font(hint_label_, fonts_.text_font, 0);
+    lv_label_set_text(hint_label_, "小智助手\n欢迎使用");
+    lv_obj_set_width(hint_label_, lv_obj_get_width(hint_container) - 16);  // 减去左右内边距
+    lv_obj_set_style_text_align(hint_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(hint_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_center(hint_label_);  // 在气泡内居中
+    
+    // 设置定时器更新时钟
+    clock_timer_ = lv_timer_create([](lv_timer_t* timer) {
+        LcdDisplay* display = static_cast<LcdDisplay*>(lv_timer_get_user_data(timer));
+        display->UpdateClockTime();
+        display->UpdateClockDate();
+    }, 1000, this);  // 每秒更新一次
+    
+    // 初始更新时钟
+    UpdateClockTime();
+    UpdateClockDate();
 }
 #endif
 
@@ -1014,4 +1094,46 @@ void LcdDisplay::SetTheme(const std::string& theme_name) {
 
     // No errors occurred. Save theme to settings
     Display::SetTheme(theme_name);
+}
+
+void LcdDisplay::UpdateClockTime() {
+    if (time_label_ == nullptr) return;
+    
+    DisplayLockGuard lock(this);
+    
+    // 获取当前时间
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    
+    // 格式化时间字符串
+    char time_str[10];
+    snprintf(time_str, sizeof(time_str), "%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+    
+    // 更新时间标签
+    lv_label_set_text(time_label_, time_str);
+}
+
+void LcdDisplay::UpdateClockDate() {
+    if (date_label_ == nullptr) return;
+    
+    DisplayLockGuard lock(this);
+    
+    // 获取当前日期
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    
+    // 格式化日期字符串，先显示日期，再显示星期
+    const char* weekday_names[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+    char date_str[32];
+    snprintf(date_str, sizeof(date_str), "%02d-%02d\n%s", 
+             timeinfo.tm_mon + 1, 
+             timeinfo.tm_mday,
+             weekday_names[timeinfo.tm_wday]);
+    
+    // 更新日期标签
+    lv_label_set_text(date_label_, date_str);
 }

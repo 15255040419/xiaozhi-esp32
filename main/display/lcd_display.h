@@ -23,6 +23,16 @@ protected:
 
     DisplayFonts fonts_;
 
+    // 时钟界面元素
+    lv_obj_t* time_label_ = nullptr;    // 显示时间的标签
+    lv_obj_t* date_label_ = nullptr;    // 显示日期的标签
+    lv_obj_t* hint_label_ = nullptr;    // 显示提示文本的标签
+    lv_timer_t* clock_timer_ = nullptr; // 时钟更新定时器
+    
+    // 时钟更新方法
+    void UpdateClockTime();
+    void UpdateClockDate();
+
     void SetupUI();
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
@@ -42,6 +52,8 @@ public:
 
     // Add theme switching function
     virtual void SetTheme(const std::string& theme_name) override;
+
+    void UpdateHintText(const char* text);
 };
 
 // RGB LCD显示器
@@ -88,4 +100,8 @@ public:
                       bool mirror_x, bool mirror_y, bool swap_xy,
                       DisplayFonts fonts);
 };
+
+// 在其他字体声明附近添加
+LV_FONT_DECLARE(font_time);
+
 #endif // LCD_DISPLAY_H
