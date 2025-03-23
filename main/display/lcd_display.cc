@@ -1,4 +1,5 @@
 #include "lcd_display.h"
+#include "bizhi.h"  // 添加背景图片头文件
 
 #include <vector>
 #include <font_awesome_symbols.h>
@@ -371,14 +372,18 @@ void LcdDisplay::SetupUI() {
     lv_obj_center(low_battery_label);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
 
-    // 创建欢迎容器 - 放在与content_相同的位置
-    welcome_container_ = lv_obj_create(container_);
+    // 创建欢迎容器 - 直接放在屏幕上，而不是container_中
+    welcome_container_ = lv_obj_create(screen);
     lv_obj_set_style_radius(welcome_container_, 0, 0);
-    lv_obj_set_width(welcome_container_, LV_HOR_RES);
-    lv_obj_set_flex_grow(welcome_container_, 1); // 与content_一样占用剩余空间
-    lv_obj_set_style_pad_all(welcome_container_, 5, 0);
-    lv_obj_set_style_bg_color(welcome_container_, current_theme.chat_background, 0);
+    lv_obj_set_size(welcome_container_, LV_HOR_RES, LV_VER_RES); // 设置为全屏大小
+    lv_obj_set_style_pad_all(welcome_container_, 0, 0);
     lv_obj_set_style_border_width(welcome_container_, 0, 0); // 移除边框
+    
+    // 创建背景图片
+    LV_IMG_DECLARE(bizhi);  // 声明背景图片
+    lv_obj_t* bg_img = lv_img_create(welcome_container_);
+    lv_img_set_src(bg_img, &bizhi);
+    lv_obj_align(bg_img, LV_ALIGN_CENTER, 0, 0);
     
     // 获取当前时间和日期
     time_t now = time(nullptr);
@@ -400,41 +405,44 @@ void LcdDisplay::SetupUI() {
     // 创建日期标签
     lv_obj_t* date_label = lv_label_create(welcome_container_);
     lv_obj_set_style_text_font(date_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(date_label, current_theme.text, 0);
+    lv_obj_set_style_text_color(date_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
     lv_label_set_text(date_label, date_str);
     lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -40);  // 放在右下角上方
     
     // 创建时间标签
     lv_obj_t* time_label = lv_label_create(welcome_container_);
     lv_obj_set_style_text_font(time_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(time_label, current_theme.text, 0);
+    lv_obj_set_style_text_color(time_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
     lv_label_set_text(time_label, time_str);
     lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -10);  // 放在右下角
     
-    // 初始时显示欢迎界面，隐藏聊天界面
+    // 初始时显示欢迎界面，隐藏聊天界面和状态栏
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(content_, LV_OBJ_FLAG_HIDDEN); // 只隐藏聊天区域，不隐藏整个container_
+    lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN); // 隐藏整个container_，包括状态栏和聊天区域
 }
 
 #define  MAX_MESSAGES 50
 void LcdDisplay::SetChatMessage(const char* role, const char* content) {
     DisplayLockGuard lock(this);
     
-    // 如果有消息内容，隐藏欢迎界面，显示聊天界面
+    // 如果有消息内容，隐藏欢迎界面，显示聊天界面和状态栏
     if (content && strlen(content) > 0) {
         if (welcome_container_ != nullptr) {
             lv_obj_add_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (container_ != nullptr) {
+            lv_obj_clear_flag(container_, LV_OBJ_FLAG_HIDDEN);
         }
         if (content_ != nullptr) {
             lv_obj_clear_flag(content_, LV_OBJ_FLAG_HIDDEN);
         }
     } else {
-        // 如果没有消息内容，显示欢迎界面，隐藏聊天界面
+        // 如果没有消息内容，显示欢迎界面，隐藏聊天界面和状态栏
         if (welcome_container_ != nullptr) {
             lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
         }
-        if (content_ != nullptr) {
-            lv_obj_add_flag(content_, LV_OBJ_FLAG_HIDDEN);
+        if (container_ != nullptr) {
+            lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN);
         }
         return; // 避免创建空消息框
     }
@@ -606,9 +614,6 @@ void LcdDisplay::ShowTimeAndDate() {
         return;
     }
     
-    // 清除欢迎容器中的所有子对象
-    lv_obj_clean(welcome_container_);
-    
     // 获取当前时间和日期
     time_t now = time(nullptr);
     struct tm* timeinfo = localtime(&now);
@@ -626,19 +631,32 @@ void LcdDisplay::ShowTimeAndDate() {
     char date_str[20];
     snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
     
-    // 创建日期标签
-    lv_obj_t* date_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(date_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(date_label, current_theme.text, 0);
-    lv_label_set_text(date_label, date_str);
-    lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -40);  // 放在右下角上方
+    // 更新日期和时间标签
+    // 查找现有的标签
+    lv_obj_t* date_label = NULL;
+    lv_obj_t* time_label = NULL;
     
-    // 创建时间标签
-    lv_obj_t* time_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(time_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(time_label, current_theme.text, 0);
-    lv_label_set_text(time_label, time_str);
-    lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -10);  // 放在右下角
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(welcome_container_); i++) {
+        lv_obj_t* child = lv_obj_get_child(welcome_container_, i);
+        if (child != NULL) {
+            // 假设第二个子对象是日期标签，第三个子对象是时间标签
+            // 第一个子对象是背景图片
+            if (i == 1) {
+                date_label = child;
+            } else if (i == 2) {
+                time_label = child;
+            }
+        }
+    }
+    
+    // 如果找到标签，更新它们
+    if (date_label != NULL) {
+        lv_label_set_text(date_label, date_str);
+    }
+    
+    if (time_label != NULL) {
+        lv_label_set_text(time_label, time_str);
+    }
 }
 #else
 void LcdDisplay::SetupUI() {
@@ -739,14 +757,15 @@ void LcdDisplay::SetupUI() {
     lv_obj_center(low_battery_label);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
 
-    // 创建欢迎容器 - 放在与content_相同的位置
-    welcome_container_ = lv_obj_create(container_);
+    // 创建欢迎容器 - 直接放在屏幕上，而不是container_中
+    welcome_container_ = lv_obj_create(screen);
     lv_obj_set_style_radius(welcome_container_, 0, 0);
-    lv_obj_set_width(welcome_container_, LV_HOR_RES);
-    lv_obj_set_flex_grow(welcome_container_, 1);
-    lv_obj_set_style_pad_all(welcome_container_, 5, 0);
-    lv_obj_set_style_bg_color(welcome_container_, current_theme.chat_background, 0);
-    lv_obj_set_style_border_width(welcome_container_, 0, 0);
+    lv_obj_set_size(welcome_container_, LV_HOR_RES, LV_VER_RES); // 设置为全屏大小
+    lv_obj_set_style_pad_all(welcome_container_, 0, 0);
+    lv_obj_set_style_border_width(welcome_container_, 0, 0); // 移除边框
+    
+    // 设置纯色背景
+    lv_obj_set_style_bg_color(welcome_container_, lv_color_black(), 0);
     
     // 获取当前时间和日期
     time_t now = time(nullptr);
@@ -768,20 +787,20 @@ void LcdDisplay::SetupUI() {
     // 创建日期标签
     lv_obj_t* date_label = lv_label_create(welcome_container_);
     lv_obj_set_style_text_font(date_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(date_label, current_theme.text, 0);
+    lv_obj_set_style_text_color(date_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
     lv_label_set_text(date_label, date_str);
     lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -40);  // 放在右下角上方
     
     // 创建时间标签
     lv_obj_t* time_label = lv_label_create(welcome_container_);
     lv_obj_set_style_text_font(time_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(time_label, current_theme.text, 0);
+    lv_obj_set_style_text_color(time_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
     lv_label_set_text(time_label, time_str);
     lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -10);  // 放在右下角
     
-    // 初始时显示欢迎界面，隐藏聊天界面
+    // 初始时显示欢迎界面，隐藏聊天界面和状态栏
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(content_, LV_OBJ_FLAG_HIDDEN); // 只隐藏聊天区域，不隐藏整个container_
+    lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN); // 隐藏整个container_，包括状态栏和聊天区域
 }
 #endif
 
