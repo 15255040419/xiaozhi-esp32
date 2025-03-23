@@ -62,7 +62,7 @@ Application::~Application() {
     vEventGroupDelete(event_group_);
 }
 
-void Application::CheckNewVersion() {
+bool Application::CheckNewVersion() {
     auto& board = Board::GetInstance();
     auto display = board.GetDisplay();
     // Check if there is a new firmware version available
@@ -76,7 +76,7 @@ void Application::CheckNewVersion() {
             retry_count++;
             if (retry_count >= MAX_RETRY) {
                 ESP_LOGE(TAG, "Too many retries, exit version check");
-                return;
+                return false;
             }
             ESP_LOGW(TAG, "Check new version failed, retry in %d seconds (%d/%d)", 60, retry_count, MAX_RETRY);
             vTaskDelay(pdMS_TO_TICKS(60000));
@@ -130,7 +130,7 @@ void Application::CheckNewVersion() {
                 Reboot();
             });
 
-            return;
+            return true;
         }
 
         // No new version, mark the current version as valid
@@ -159,6 +159,22 @@ void Application::CheckNewVersion() {
         // Exit the loop if upgrade or idle
         break;
     }
+
+    // 检查时间是否已同步，如果已同步就更新欢迎界面的时间
+    if (ota_.HasServerTime()) {
+        auto display = Board::GetInstance().GetDisplay();
+        display->ShowTimeAndDate();
+        
+        // 如果设备处于空闲状态，也更新状态栏的时间
+        if (device_state_ == kDeviceStateIdle) {
+            time_t now = time(NULL);
+            char time_str[64];
+            strftime(time_str, sizeof(time_str), "%H:%M  ", localtime(&now));
+            display->SetStatus(time_str);
+        }
+    }
+    
+    return true;
 }
 
 void Application::ShowActivationCode() {
@@ -539,25 +555,41 @@ void Application::Start() {
 void Application::OnClockTimer() {
     clock_ticks_++;
 
-    // Print the debug info every 10 seconds
+    // 检查时间是否已同步，如果已同步且是第一次，立即更新欢迎界面的时间
+    static bool first_time_sync = false;
+    if (!first_time_sync && ota_.HasServerTime()) {
+        first_time_sync = true;
+        auto display = Board::GetInstance().GetDisplay();
+        display->ShowTimeAndDate();
+        
+        // 如果设备处于空闲状态，也更新状态栏的时间
+        if (device_state_ == kDeviceStateIdle) {
+            time_t now = time(NULL);
+            char time_str[64];
+            strftime(time_str, sizeof(time_str), "%H:%M  ", localtime(&now));
+            display->SetStatus(time_str);
+        }
+    }
+
+    // 每分钟更新一次欢迎界面的时间
+    if (clock_ticks_ % 60 == 0) {  // 每分钟执行一次
+        auto display = Board::GetInstance().GetDisplay();
+        display->ShowTimeAndDate();
+        
+        // 如果设备处于空闲状态，也更新状态栏的时间
+        if (device_state_ == kDeviceStateIdle && ota_.HasServerTime()) {
+            time_t now = time(NULL);
+            char time_str[64];
+            strftime(time_str, sizeof(time_str), "%H:%M  ", localtime(&now));
+            display->SetStatus(time_str);
+        }
+    }
+
+    // 每10秒打印一次调试信息
     if (clock_ticks_ % 10 == 0) {
-        // SystemInfo::PrintRealTimeStats(pdMS_TO_TICKS(1000));
         int free_sram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
         int min_free_sram = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
         ESP_LOGI(TAG, "Free internal: %u minimal internal: %u", free_sram, min_free_sram);
-
-        // If we have synchronized server time, set the status to clock "HH:MM" if the device is idle
-        if (ota_.HasServerTime()) {
-            if (device_state_ == kDeviceStateIdle) {
-                Schedule([this]() {
-                    // Set status to clock "HH:MM"
-                    time_t now = time(NULL);
-                    char time_str[64];
-                    strftime(time_str, sizeof(time_str), "%H:%M  ", localtime(&now));
-                    Board::GetInstance().GetDisplay()->SetStatus(time_str);
-                });
-            }
-        }
     }
 }
 
@@ -732,6 +764,13 @@ void Application::SetDeviceState(DeviceState state) {
         case kDeviceStateIdle:
             display->SetStatus(Lang::Strings::STANDBY);
             display->SetEmotion("neutral");
+            
+            // 在空闲状态时，切换回欢迎界面
+            display->SetChatMessage("system", "");
+            
+            // 立即更新一次时间显示
+            display->ShowTimeAndDate();
+            
 #if CONFIG_USE_AUDIO_PROCESSOR
             audio_processor_.Stop();
 #endif
@@ -747,6 +786,10 @@ void Application::SetDeviceState(DeviceState state) {
         case kDeviceStateListening:
             display->SetStatus(Lang::Strings::LISTENING);
             display->SetEmotion("neutral");
+            
+            // 在聆听状态时，切换到聊天界面
+            display->SetChatMessage("system", " ");
+            
             ResetDecoder();
             opus_encoder_->ResetState();
 #if CONFIG_USE_AUDIO_PROCESSOR

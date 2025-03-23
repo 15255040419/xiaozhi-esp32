@@ -31,6 +31,9 @@ public:
     inline int width() const { return width_; }
     inline int height() const { return height_; }
 
+    // 添加显示时间和日期的虚拟方法（默认为空实现）
+    virtual void ShowTimeAndDate() {}
+
 protected:
     int width_ = 0;
     int height_ = 0;

@@ -428,8 +428,11 @@ void LcdDisplay::SetupUI() {
 void LcdDisplay::SetChatMessage(const char* role, const char* content) {
     DisplayLockGuard lock(this);
     
-    // 如果有消息内容，隐藏欢迎界面，显示聊天界面和状态栏
-    if (content && strlen(content) > 0) {
+    // 如果是系统消息且内容只有空格，这是我们用来切换界面的特殊情况
+    bool is_switch_trigger = (strcmp(role, "system") == 0 && content && strlen(content) == 1 && content[0] == ' ');
+    
+    // 如果有消息内容或是切换触发器，隐藏欢迎界面，显示聊天界面
+    if ((content && strlen(content) > 0) || is_switch_trigger) {
         if (welcome_container_ != nullptr) {
             lv_obj_add_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
         }
@@ -439,8 +442,13 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
         if (content_ != nullptr) {
             lv_obj_clear_flag(content_, LV_OBJ_FLAG_HIDDEN);
         }
+        
+        // 如果只是切换触发器，不创建消息气泡
+        if (is_switch_trigger) {
+            return;
+        }
     } else {
-        // 如果没有消息内容，显示欢迎界面，隐藏聊天界面和状态栏
+        // 如果没有消息内容，显示欢迎界面，隐藏聊天界面
         if (welcome_container_ != nullptr) {
             lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
         }
@@ -634,8 +642,7 @@ void LcdDisplay::ShowTimeAndDate() {
     char date_str[20];
     snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
     
-    // 更新日期和时间标签
-    // 查找现有的标签
+    // 查找时间和日期标签
     lv_obj_t* date_label = NULL;
     lv_obj_t* time_label = NULL;
     
@@ -643,7 +650,6 @@ void LcdDisplay::ShowTimeAndDate() {
         lv_obj_t* child = lv_obj_get_child(welcome_container_, i);
         if (child != NULL) {
             // 假设第二个子对象是日期标签，第三个子对象是时间标签
-            // 第一个子对象是背景图片
             if (i == 1) {
                 date_label = child;
             } else if (i == 2) {
@@ -652,13 +658,19 @@ void LcdDisplay::ShowTimeAndDate() {
         }
     }
     
-    // 如果找到标签，更新它们
-    if (date_label != NULL) {
-        lv_label_set_text(date_label, date_str);
-    }
-    
+    // 更新时间标签（每次调用都更新）
     if (time_label != NULL) {
         lv_label_set_text(time_label, time_str);
+    }
+    
+    // 更新日期标签（只在日期变化时更新）
+    static int last_day = -1;
+    static int last_wday = -1;
+    
+    if (date_label != NULL && (day != last_day || timeinfo->tm_wday != last_wday || last_day == -1)) {
+        lv_label_set_text(date_label, date_str);
+        last_day = day;
+        last_wday = timeinfo->tm_wday;
     }
 }
 #else
