@@ -13,6 +13,9 @@
 #include "board.h"
 #include <ctime>
 
+// 添加时间字体声明
+extern const lv_font_t font_time;
+
 #define TAG "LcdDisplay"
 
 // Color definitions for dark theme
@@ -402,19 +405,19 @@ void LcdDisplay::SetupUI() {
     char date_str[20];
     snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
     
-    // 创建日期标签
+    // 创建日期标签 - 使用状态栏相同的字体
     lv_obj_t* date_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(date_label, &font_dingding, 0);
+    lv_obj_set_style_text_font(date_label, fonts_.text_font, 0); // 使用状态栏相同的字体
     lv_obj_set_style_text_color(date_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
     lv_label_set_text(date_label, date_str);
-    lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -40);  // 放在右下角上方
+    lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -80);  // 放在时间上方，根据字体大小调整位置
     
-    // 创建时间标签
+    // 创建时间标签 - 使用font_time字体
     lv_obj_t* time_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(time_label, &font_dingding, 0);
+    lv_obj_set_style_text_font(time_label, &font_time, 0); // 使用font_time字体
     lv_obj_set_style_text_color(time_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
     lv_label_set_text(time_label, time_str);
-    lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -10);  // 放在右下角
+    lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -20);  // 放在右下角，根据字体大小调整位置
     
     // 初始时显示欢迎界面，隐藏聊天界面和状态栏
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
@@ -784,19 +787,19 @@ void LcdDisplay::SetupUI() {
     char date_str[20];
     snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
     
-    // 创建日期标签
+    // 创建日期标签 - 使用状态栏相同的字体
     lv_obj_t* date_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(date_label, &font_dingding, 0);
+    lv_obj_set_style_text_font(date_label, fonts_.text_font, 0); // 使用状态栏相同的字体
     lv_obj_set_style_text_color(date_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
     lv_label_set_text(date_label, date_str);
-    lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -40);  // 放在右下角上方
+    lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -80);  // 放在时间上方，根据字体大小调整位置
     
-    // 创建时间标签
+    // 创建时间标签 - 使用font_time字体
     lv_obj_t* time_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(time_label, &font_dingding, 0);
+    lv_obj_set_style_text_font(time_label, &font_time, 0); // 使用font_time字体
     lv_obj_set_style_text_color(time_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
     lv_label_set_text(time_label, time_str);
-    lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -10);  // 放在右下角
+    lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -20);  // 放在右下角，根据字体大小调整位置
     
     // 初始时显示欢迎界面，隐藏聊天界面和状态栏
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
