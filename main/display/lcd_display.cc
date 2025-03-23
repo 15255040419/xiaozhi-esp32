@@ -10,6 +10,7 @@
 #include "settings.h"
 
 #include "board.h"
+#include <ctime>
 
 #define TAG "LcdDisplay"
 
@@ -379,32 +380,36 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_bg_color(welcome_container_, current_theme.chat_background, 0);
     lv_obj_set_style_border_width(welcome_container_, 0, 0); // 移除边框
     
-    // 创建提示文本标签（靠左显示）
-    lv_obj_t* hint_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(hint_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(hint_label, current_theme.text, 0);
-    lv_label_set_text(hint_label, "讯息:");
-    lv_obj_set_style_text_align(hint_label, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_width(hint_label, LV_HOR_RES - 20);
-    lv_obj_align(hint_label, LV_ALIGN_TOP_LEFT, 10, 20);  // 将y偏移从10改为30，让标签往下移动20个像素
+    // 获取当前时间和日期
+    time_t now = time(nullptr);
+    struct tm* timeinfo = localtime(&now);
     
-    // 创建主欢迎信息标签
-    lv_obj_t* welcome_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(welcome_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(welcome_label, current_theme.text, 0);
-    lv_label_set_text(welcome_label, "有内鬼，终止交易");
-    lv_obj_set_style_text_align(welcome_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(welcome_label, LV_HOR_RES - 20);
-    lv_obj_align(welcome_label, LV_ALIGN_CENTER, 0, 0);  // 居中显示
+    // 格式化时间为 HH:MM 格式
+    char time_str[10];
+    strftime(time_str, sizeof(time_str), "%H:%M", timeinfo);
     
-    // 创建小字体的英文标签
-    lv_obj_t* sub_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(sub_label, fonts_.text_font, 0);  // 使用较小的字体
-    lv_obj_set_style_text_color(sub_label, current_theme.text, 0);
-    lv_label_set_text(sub_label, "FANG BIAN MIAN");
-    lv_obj_set_style_text_align(sub_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(sub_label, LV_HOR_RES - 20);
-    lv_obj_align(sub_label, LV_ALIGN_CENTER, 0, 30);  // 在主标签下方显示
+    // 获取日期和星期
+    int day = timeinfo->tm_mday;
+    const char* weekdays[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+    const char* weekday = weekdays[timeinfo->tm_wday];
+    
+    // 格式化日期为 "23 周日" 格式
+    char date_str[20];
+    snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
+    
+    // 创建日期标签
+    lv_obj_t* date_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(date_label, &font_dingding, 0);
+    lv_obj_set_style_text_color(date_label, current_theme.text, 0);
+    lv_label_set_text(date_label, date_str);
+    lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -40);  // 放在右下角上方
+    
+    // 创建时间标签
+    lv_obj_t* time_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(time_label, &font_dingding, 0);
+    lv_obj_set_style_text_color(time_label, current_theme.text, 0);
+    lv_label_set_text(time_label, time_str);
+    lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -10);  // 放在右下角
     
     // 初始时显示欢迎界面，隐藏聊天界面
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
@@ -593,6 +598,48 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
         }
     }
 }
+
+void LcdDisplay::ShowTimeAndDate() {
+    DisplayLockGuard lock(this);
+    
+    if (welcome_container_ == nullptr) {
+        return;
+    }
+    
+    // 清除欢迎容器中的所有子对象
+    lv_obj_clean(welcome_container_);
+    
+    // 获取当前时间和日期
+    time_t now = time(nullptr);
+    struct tm* timeinfo = localtime(&now);
+    
+    // 格式化时间为 HH:MM 格式
+    char time_str[10];
+    strftime(time_str, sizeof(time_str), "%H:%M", timeinfo);
+    
+    // 获取日期和星期
+    int day = timeinfo->tm_mday;
+    const char* weekdays[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+    const char* weekday = weekdays[timeinfo->tm_wday];
+    
+    // 格式化日期为 "23 周日" 格式
+    char date_str[20];
+    snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
+    
+    // 创建日期标签
+    lv_obj_t* date_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(date_label, &font_dingding, 0);
+    lv_obj_set_style_text_color(date_label, current_theme.text, 0);
+    lv_label_set_text(date_label, date_str);
+    lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -40);  // 放在右下角上方
+    
+    // 创建时间标签
+    lv_obj_t* time_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(time_label, &font_dingding, 0);
+    lv_obj_set_style_text_color(time_label, current_theme.text, 0);
+    lv_label_set_text(time_label, time_str);
+    lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -10);  // 放在右下角
+}
 #else
 void LcdDisplay::SetupUI() {
     DisplayLockGuard lock(this);
@@ -701,32 +748,36 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_bg_color(welcome_container_, current_theme.chat_background, 0);
     lv_obj_set_style_border_width(welcome_container_, 0, 0);
     
-    // 创建提示文本标签（靠左显示）
-    lv_obj_t* hint_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(hint_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(hint_label, current_theme.text, 0);
-    lv_label_set_text(hint_label, "讯息:");
-    lv_obj_set_style_text_align(hint_label, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_width(hint_label, LV_HOR_RES - 20);
-    lv_obj_align(hint_label, LV_ALIGN_TOP_LEFT, 10, 20);  // 将y偏移从10改为30，让标签往下移动20个像素
+    // 获取当前时间和日期
+    time_t now = time(nullptr);
+    struct tm* timeinfo = localtime(&now);
     
-    // 创建主欢迎信息标签
-    lv_obj_t* welcome_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(welcome_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(welcome_label, current_theme.text, 0);
-    lv_label_set_text(welcome_label, "有内鬼，终止交易");
-    lv_obj_set_style_text_align(welcome_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(welcome_label, LV_HOR_RES - 20);
-    lv_obj_align(welcome_label, LV_ALIGN_CENTER, 0, 0);  // 居中显示
+    // 格式化时间为 HH:MM 格式
+    char time_str[10];
+    strftime(time_str, sizeof(time_str), "%H:%M", timeinfo);
     
-    // 创建小字体的英文标签
-    lv_obj_t* sub_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(sub_label, fonts_.text_font, 0);  // 使用较小的字体
-    lv_obj_set_style_text_color(sub_label, current_theme.text, 0);
-    lv_label_set_text(sub_label, "FANG BIAN MIAN");
-    lv_obj_set_style_text_align(sub_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(sub_label, LV_HOR_RES - 20);
-    lv_obj_align(sub_label, LV_ALIGN_CENTER, 0, 30);  // 在主标签下方显示
+    // 获取日期和星期
+    int day = timeinfo->tm_mday;
+    const char* weekdays[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+    const char* weekday = weekdays[timeinfo->tm_wday];
+    
+    // 格式化日期为 "23 周日" 格式
+    char date_str[20];
+    snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
+    
+    // 创建日期标签
+    lv_obj_t* date_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(date_label, &font_dingding, 0);
+    lv_obj_set_style_text_color(date_label, current_theme.text, 0);
+    lv_label_set_text(date_label, date_str);
+    lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -40);  // 放在右下角上方
+    
+    // 创建时间标签
+    lv_obj_t* time_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(time_label, &font_dingding, 0);
+    lv_obj_set_style_text_color(time_label, current_theme.text, 0);
+    lv_label_set_text(time_label, time_str);
+    lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -10);  // 放在右下角
     
     // 初始时显示欢迎界面，隐藏聊天界面
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);

@@ -42,6 +42,15 @@ public:
 
     // Add theme switching function
     virtual void SetTheme(const std::string& theme_name) override;
+
+    // 添加显示时间和日期的方法
+    void ShowTimeAndDate();
+    
+private:
+    // 获取当前日期字符串（格式：日 周几）
+    std::string GetDateString();
+    // 获取当前时间字符串
+    std::string GetTimeString();
 };
 
 // RGB LCD显示器
