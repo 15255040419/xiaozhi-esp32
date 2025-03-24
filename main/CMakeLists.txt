@@ -21,6 +21,9 @@ set(SOURCES "audio_codecs/audio_codec.cc"
             "font_dingding.c"
             "bizhi.c"
             "font_time.c"
+            "assets/wallpapers/wallpaper1.c"
+            "assets/wallpapers/wallpaper2.c"
+            "assets/wallpapers/wallpaper3.c"
             )
 
 set(INCLUDE_DIRS "." "display" "audio_codecs" "protocols" "audio_processing")

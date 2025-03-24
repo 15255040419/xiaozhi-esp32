@@ -61,11 +61,19 @@ public:
     // 更新网络图标（同时更新状态栏和欢迎界面）
     void UpdateNetworkIcon(const char* icon);
 
+    // 更换背景壁纸
+    void ChangeWallpaper(const char* wallpaper_name);
+
 private:
     // 获取当前日期字符串（格式：日 周几）
     std::string GetDateString();
     // 获取当前时间字符串
     std::string GetTimeString();
+
+    // 当前壁纸索引
+    int current_wallpaper_index_ = 0;
+    // 壁纸图像对象
+    lv_obj_t* bg_img_ = nullptr;
 };
 
 // RGB LCD显示器
