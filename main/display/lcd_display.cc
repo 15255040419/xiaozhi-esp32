@@ -17,6 +17,9 @@
 // 添加时间字体声明
 LV_FONT_DECLARE(font_time);
 
+// 在文件顶部添加字体声明（如果尚未添加）
+LV_FONT_DECLARE(font_dingding);
+
 #define TAG "LcdDisplay"
 
 // Color definitions for dark theme
@@ -415,12 +418,12 @@ void LcdDisplay::SetupUI() {
     char date_str[20];
     snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
     
-    // 创建日期标签 - 使用状态栏相同的字体
+    // 创建日期标签 - 使用丁丁字体
     lv_obj_t* date_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(date_label, fonts_.text_font, 0); // 使用状态栏相同的字体
-    lv_obj_set_style_text_color(date_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
+    lv_obj_set_style_text_font(date_label, &font_dingding, 0);
+    lv_obj_set_style_text_color(date_label, lv_color_white(), 0);
     lv_label_set_text(date_label, date_str);
-    lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -80);  // 放在时间上方，根据字体大小调整位置
+    lv_obj_align(date_label, LV_ALIGN_TOP_RIGHT, -10, 90);
     
     // 创建分离的时间标签
     hour_label_ = lv_label_create(welcome_container_);
@@ -466,30 +469,30 @@ void LcdDisplay::SetupUI() {
     lv_coord_t total_width = hour_width + spacing + colon_width + spacing + minute_width;
     
     // 计算起始x坐标（从右边缘向左偏移）
-    lv_coord_t right_margin = 10; // 右边距
+    lv_coord_t right_margin = 5; // 右边距
     lv_coord_t start_x = LV_HOR_RES - right_margin - total_width;
     
     // 计算时间标签的垂直位置 - 在日期下方，电池图标上方
-    lv_coord_t time_y = LV_VER_RES - 85; // 距离底部85像素，可以根据需要调整
+    lv_coord_t time_y = 40; // 距离顶部40像素，可以根据需要调整
     
     // 设置每个标签的精确位置
-    lv_obj_set_pos(hour_label_, start_x, time_y);
-    lv_obj_set_pos(colon_label_, start_x + hour_width + spacing, time_y);
-    lv_obj_set_pos(minute_label_, start_x + hour_width + spacing + colon_width + spacing, time_y);
+    lv_obj_set_pos(hour_label_, LV_HOR_RES - hour_width - spacing - colon_width - spacing - minute_width - 10, time_y);
+    lv_obj_set_pos(colon_label_, LV_HOR_RES - colon_width - spacing - minute_width - 10, time_y);
+    lv_obj_set_pos(minute_label_, LV_HOR_RES - minute_width - 10, time_y);
     
     // 创建欢迎界面上的电池图标
     lv_obj_t* welcome_battery_label = lv_label_create(welcome_container_);
     lv_obj_set_style_text_font(welcome_battery_label, fonts_.icon_font, 0);
     lv_obj_set_style_text_color(welcome_battery_label, lv_color_white(), 0);
-    lv_label_set_text(welcome_battery_label, "");  // 初始为空，将通过UpdateBatteryIcon更新
-    lv_obj_align(welcome_battery_label, LV_ALIGN_BOTTOM_RIGHT, -20, -5);  // 放在时间下方
+    lv_label_set_text(welcome_battery_label, "");
+    lv_obj_align(welcome_battery_label, LV_ALIGN_TOP_RIGHT, -10, 5);
     
     // 创建欢迎界面上的WiFi图标
     lv_obj_t* welcome_network_label = lv_label_create(welcome_container_);
     lv_obj_set_style_text_font(welcome_network_label, fonts_.icon_font, 0);
     lv_obj_set_style_text_color(welcome_network_label, lv_color_white(), 0);
-    lv_label_set_text(welcome_network_label, "");  // 初始为空，将通过UpdateNetworkIcon更新
-    lv_obj_align(welcome_network_label, LV_ALIGN_BOTTOM_RIGHT, -60, -5);  // 放在电池图标左侧
+    lv_label_set_text(welcome_network_label, "");
+    lv_obj_align(welcome_network_label, LV_ALIGN_TOP_RIGHT, -40, 5);
     
     // 保存这些标签的引用，以便稍后更新
     welcome_battery_label_ = welcome_battery_label;
@@ -962,12 +965,12 @@ void LcdDisplay::SetupUI() {
     char date_str[20];
     snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
     
-    // 创建日期标签 - 使用状态栏相同的字体
+    // 创建日期标签 - 使用丁丁字体
     lv_obj_t* date_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(date_label, fonts_.text_font, 0); // 使用状态栏相同的字体
-    lv_obj_set_style_text_color(date_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
+    lv_obj_set_style_text_font(date_label, &font_dingding, 0);
+    lv_obj_set_style_text_color(date_label, lv_color_white(), 0);
     lv_label_set_text(date_label, date_str);
-    lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -60);  // 放在时间上方
+    lv_obj_align(date_label, LV_ALIGN_TOP_RIGHT, -10, 90);
     
     // 创建分离的时间标签
     hour_label_ = lv_label_create(welcome_container_);
@@ -1013,30 +1016,30 @@ void LcdDisplay::SetupUI() {
     lv_coord_t total_width = hour_width + spacing + colon_width + spacing + minute_width;
     
     // 计算起始x坐标（从右边缘向左偏移）
-    lv_coord_t right_margin = 10; // 右边距
+    lv_coord_t right_margin = 5; // 右边距
     lv_coord_t start_x = LV_HOR_RES - right_margin - total_width;
     
     // 计算时间标签的垂直位置 - 在日期下方，电池图标上方
-    lv_coord_t time_y = LV_VER_RES - 85; // 距离底部85像素，可以根据需要调整
+    lv_coord_t time_y = 40; // 距离顶部40像素，可以根据需要调整
     
     // 设置每个标签的精确位置
-    lv_obj_set_pos(hour_label_, start_x, time_y);
-    lv_obj_set_pos(colon_label_, start_x + hour_width + spacing, time_y);
-    lv_obj_set_pos(minute_label_, start_x + hour_width + spacing + colon_width + spacing, time_y);
+    lv_obj_set_pos(hour_label_, LV_HOR_RES - hour_width - spacing - colon_width - spacing - minute_width - 10, time_y);
+    lv_obj_set_pos(colon_label_, LV_HOR_RES - colon_width - spacing - minute_width - 10, time_y);
+    lv_obj_set_pos(minute_label_, LV_HOR_RES - minute_width - 10, time_y);
     
     // 创建欢迎界面上的电池图标
     lv_obj_t* welcome_battery_label = lv_label_create(welcome_container_);
     lv_obj_set_style_text_font(welcome_battery_label, fonts_.icon_font, 0);
     lv_obj_set_style_text_color(welcome_battery_label, lv_color_white(), 0);
-    lv_label_set_text(welcome_battery_label, "");  // 初始为空，将通过UpdateBatteryIcon更新
-    lv_obj_align(welcome_battery_label, LV_ALIGN_BOTTOM_RIGHT, -20, -5);  // 放在时间下方
+    lv_label_set_text(welcome_battery_label, "");
+    lv_obj_align(welcome_battery_label, LV_ALIGN_TOP_RIGHT, -10, 5);
     
     // 创建欢迎界面上的WiFi图标
     lv_obj_t* welcome_network_label = lv_label_create(welcome_container_);
     lv_obj_set_style_text_font(welcome_network_label, fonts_.icon_font, 0);
     lv_obj_set_style_text_color(welcome_network_label, lv_color_white(), 0);
-    lv_label_set_text(welcome_network_label, "");  // 初始为空，将通过UpdateNetworkIcon更新
-    lv_obj_align(welcome_network_label, LV_ALIGN_BOTTOM_RIGHT, -60, -5);  // 放在电池图标左侧
+    lv_label_set_text(welcome_network_label, "");
+    lv_obj_align(welcome_network_label, LV_ALIGN_TOP_RIGHT, -40, 5);
     
     // 保存这些标签的引用，以便稍后更新
     welcome_battery_label_ = welcome_battery_label;
