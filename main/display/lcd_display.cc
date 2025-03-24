@@ -440,9 +440,14 @@ void LcdDisplay::SetupUI() {
     lv_label_set_text(colon_label_, ":");
     lv_label_set_text(minute_label_, "00");
     
-    // 设置固定宽度 - 使用足够大的值
-    lv_coord_t hour_width = 60;  // 根据您的字体大小调整
-    lv_coord_t minute_width = 60; // 根据您的字体大小调整
+    // 禁用标签的自动换行
+    lv_label_set_long_mode(hour_label_, LV_LABEL_LONG_CLIP);
+    lv_label_set_long_mode(colon_label_, LV_LABEL_LONG_CLIP);
+    lv_label_set_long_mode(minute_label_, LV_LABEL_LONG_CLIP);
+    
+    // 设置固定宽度 - 为40号字体设置更大的宽度
+    lv_coord_t hour_width = 60;  // 为40号字体增加宽度
+    lv_coord_t minute_width = 60; // 为40号字体增加宽度
     lv_obj_set_width(hour_label_, hour_width);
     lv_obj_set_width(minute_label_, minute_width);
     
@@ -455,13 +460,13 @@ void LcdDisplay::SetupUI() {
     lv_coord_t colon_width = lv_obj_get_width(colon_label_);
     
     // 定义标签之间的固定间距
-    lv_coord_t spacing = 5; // 可以根据需要调整
+    lv_coord_t spacing = 2; // 为40号字体增加间距
     
     // 计算总宽度
     lv_coord_t total_width = hour_width + spacing + colon_width + spacing + minute_width;
     
     // 计算起始x坐标（从右边缘向左偏移）
-    lv_coord_t right_margin = 20; // 右边距
+    lv_coord_t right_margin = 10; // 右边距
     lv_coord_t start_x = LV_HOR_RES - right_margin - total_width;
     
     // 计算时间标签的垂直位置 - 在日期下方，电池图标上方
@@ -505,6 +510,9 @@ void LcdDisplay::SetupUI() {
     
     esp_timer_create(&timer_args, &colon_timer);
     esp_timer_start_periodic(colon_timer, 1000000); // 1秒 = 1000000微秒
+
+    // 强制立即更新一次时间显示，确保初始显示正确
+    ShowTimeAndDate();
 }
 
 #define  MAX_MESSAGES 50
@@ -979,9 +987,14 @@ void LcdDisplay::SetupUI() {
     lv_label_set_text(colon_label_, ":");
     lv_label_set_text(minute_label_, "00");
     
-    // 设置固定宽度 - 使用足够大的值
-    lv_coord_t hour_width = 60;  // 根据您的字体大小调整
-    lv_coord_t minute_width = 60; // 根据您的字体大小调整
+    // 禁用标签的自动换行
+    lv_label_set_long_mode(hour_label_, LV_LABEL_LONG_CLIP);
+    lv_label_set_long_mode(colon_label_, LV_LABEL_LONG_CLIP);
+    lv_label_set_long_mode(minute_label_, LV_LABEL_LONG_CLIP);
+    
+    // 设置固定宽度 - 为40号字体设置更大的宽度
+    lv_coord_t hour_width = 60;  // 为40号字体增加宽度
+    lv_coord_t minute_width = 60; // 为40号字体增加宽度
     lv_obj_set_width(hour_label_, hour_width);
     lv_obj_set_width(minute_label_, minute_width);
     
@@ -994,17 +1007,17 @@ void LcdDisplay::SetupUI() {
     lv_coord_t colon_width = lv_obj_get_width(colon_label_);
     
     // 定义标签之间的固定间距
-    lv_coord_t spacing = 5; // 可以根据需要调整
+    lv_coord_t spacing = 2; // 为40号字体增加间距
     
     // 计算总宽度
     lv_coord_t total_width = hour_width + spacing + colon_width + spacing + minute_width;
     
     // 计算起始x坐标（从右边缘向左偏移）
-    lv_coord_t right_margin = 20; // 右边距
+    lv_coord_t right_margin = 10; // 右边距
     lv_coord_t start_x = LV_HOR_RES - right_margin - total_width;
     
     // 计算时间标签的垂直位置 - 在日期下方，电池图标上方
-    lv_coord_t time_y = LV_VER_RES - 40; // 距离底部40像素，可以根据需要调整
+    lv_coord_t time_y = LV_VER_RES - 85; // 距离底部85像素，可以根据需要调整
     
     // 设置每个标签的精确位置
     lv_obj_set_pos(hour_label_, start_x, time_y);
@@ -1044,6 +1057,9 @@ void LcdDisplay::SetupUI() {
     
     esp_timer_create(&timer_args, &colon_timer);
     esp_timer_start_periodic(colon_timer, 1000000); // 1秒 = 1000000微秒
+
+    // 强制立即更新一次时间显示，确保初始显示正确
+    ShowTimeAndDate();
 }
 #endif
 
