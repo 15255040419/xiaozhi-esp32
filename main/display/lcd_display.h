@@ -23,6 +23,10 @@ protected:
 
     DisplayFonts fonts_;
 
+    // 欢迎界面上的电池和网络图标
+    lv_obj_t* welcome_battery_label_ = nullptr;
+    lv_obj_t* welcome_network_label_ = nullptr;
+
     void SetupUI();
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
@@ -46,6 +50,12 @@ public:
     // 添加显示时间和日期的方法
     void ShowTimeAndDate();
     
+    // 更新电池图标（同时更新状态栏和欢迎界面）
+    void UpdateBatteryIcon(const char* icon);
+    
+    // 更新网络图标（同时更新状态栏和欢迎界面）
+    void UpdateNetworkIcon(const char* icon);
+
 private:
     // 获取当前日期字符串（格式：日 周几）
     std::string GetDateString();

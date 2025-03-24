@@ -394,7 +394,13 @@ void LcdDisplay::SetupUI() {
     
     // 格式化时间为 HH:MM 格式
     char time_str[10];
-    strftime(time_str, sizeof(time_str), "%H:%M", timeinfo);
+    if (timeinfo->tm_sec % 2 == 0) {
+        // 偶数秒显示冒号
+        strftime(time_str, sizeof(time_str), "%H:%M", timeinfo);
+    } else {
+        // 奇数秒隐藏冒号，用空格替代
+        strftime(time_str, sizeof(time_str), "%H %M", timeinfo);
+    }
     
     // 获取日期和星期
     int day = timeinfo->tm_mday;
@@ -417,7 +423,25 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_font(time_label, &font_time, 0); // 使用font_time字体
     lv_obj_set_style_text_color(time_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
     lv_label_set_text(time_label, time_str);
-    lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -20);  // 放在右下角，根据字体大小调整位置
+    lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -25);  // 放在右下角，根据字体大小调整位置
+    
+    // 创建欢迎界面上的电池图标
+    lv_obj_t* welcome_battery_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(welcome_battery_label, fonts_.icon_font, 0);
+    lv_obj_set_style_text_color(welcome_battery_label, lv_color_white(), 0);
+    lv_label_set_text(welcome_battery_label, "");  // 初始为空，将通过UpdateBatteryIcon更新
+    lv_obj_align(welcome_battery_label, LV_ALIGN_BOTTOM_RIGHT, -20, -5);  // 放在时间下方
+    
+    // 创建欢迎界面上的WiFi图标
+    lv_obj_t* welcome_network_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(welcome_network_label, fonts_.icon_font, 0);
+    lv_obj_set_style_text_color(welcome_network_label, lv_color_white(), 0);
+    lv_label_set_text(welcome_network_label, "");  // 初始为空，将通过UpdateNetworkIcon更新
+    lv_obj_align(welcome_network_label, LV_ALIGN_BOTTOM_RIGHT, -60, -5);  // 放在电池图标左侧
+    
+    // 保存这些标签的引用，以便稍后更新
+    welcome_battery_label_ = welcome_battery_label;
+    welcome_network_label_ = welcome_network_label;
     
     // 初始时显示欢迎界面，隐藏聊天界面和状态栏
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
@@ -629,9 +653,15 @@ void LcdDisplay::ShowTimeAndDate() {
     time_t now = time(nullptr);
     struct tm* timeinfo = localtime(&now);
     
-    // 格式化时间为 HH:MM 格式
+    // 格式化时间为 HH:MM 格式，根据秒数的奇偶性决定冒号是否显示
     char time_str[10];
-    strftime(time_str, sizeof(time_str), "%H:%M", timeinfo);
+    if (timeinfo->tm_sec % 2 == 0) {
+        // 偶数秒显示冒号
+        strftime(time_str, sizeof(time_str), "%H:%M", timeinfo);
+    } else {
+        // 奇数秒隐藏冒号，用空格替代
+        strftime(time_str, sizeof(time_str), "%H %M", timeinfo);
+    }
     
     // 获取日期和星期
     int day = timeinfo->tm_mday;
@@ -671,6 +701,49 @@ void LcdDisplay::ShowTimeAndDate() {
         lv_label_set_text(date_label, date_str);
         last_day = day;
         last_wday = timeinfo->tm_wday;
+    }
+    
+    // 同步欢迎界面上的电池和网络图标
+    if (welcome_battery_label_ != nullptr && battery_label_ != nullptr) {
+        const char* battery_text = lv_label_get_text(battery_label_);
+        if (battery_text && strlen(battery_text) > 0) {
+            lv_label_set_text(welcome_battery_label_, battery_text);
+        }
+    }
+    
+    if (welcome_network_label_ != nullptr && network_label_ != nullptr) {
+        const char* network_text = lv_label_get_text(network_label_);
+        if (network_text && strlen(network_text) > 0) {
+            lv_label_set_text(welcome_network_label_, network_text);
+        }
+    }
+}
+
+void LcdDisplay::UpdateBatteryIcon(const char* icon) {
+    DisplayLockGuard lock(this);
+    
+    // 更新状态栏中的电池图标
+    if (battery_label_ != nullptr) {
+        lv_label_set_text(battery_label_, icon);
+    }
+    
+    // 同时更新欢迎界面中的电池图标
+    if (welcome_battery_label_ != nullptr) {
+        lv_label_set_text(welcome_battery_label_, icon);
+    }
+}
+
+void LcdDisplay::UpdateNetworkIcon(const char* icon) {
+    DisplayLockGuard lock(this);
+    
+    // 更新状态栏中的网络图标
+    if (network_label_ != nullptr) {
+        lv_label_set_text(network_label_, icon);
+    }
+    
+    // 同时更新欢迎界面中的网络图标
+    if (welcome_network_label_ != nullptr) {
+        lv_label_set_text(welcome_network_label_, icon);
     }
 }
 #else
@@ -788,7 +861,13 @@ void LcdDisplay::SetupUI() {
     
     // 格式化时间为 HH:MM 格式
     char time_str[10];
-    strftime(time_str, sizeof(time_str), "%H:%M", timeinfo);
+    if (timeinfo->tm_sec % 2 == 0) {
+        // 偶数秒显示冒号
+        strftime(time_str, sizeof(time_str), "%H:%M", timeinfo);
+    } else {
+        // 奇数秒隐藏冒号，用空格替代
+        strftime(time_str, sizeof(time_str), "%H %M", timeinfo);
+    }
     
     // 获取日期和星期
     int day = timeinfo->tm_mday;
@@ -811,7 +890,25 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_font(time_label, &font_time, 0); // 使用font_time字体
     lv_obj_set_style_text_color(time_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
     lv_label_set_text(time_label, time_str);
-    lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -20);  // 放在右下角，根据字体大小调整位置
+    lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -25);  // 放在右下角，根据字体大小调整位置
+    
+    // 创建欢迎界面上的电池图标
+    lv_obj_t* welcome_battery_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(welcome_battery_label, fonts_.icon_font, 0);
+    lv_obj_set_style_text_color(welcome_battery_label, lv_color_white(), 0);
+    lv_label_set_text(welcome_battery_label, "");  // 初始为空，将通过UpdateBatteryIcon更新
+    lv_obj_align(welcome_battery_label, LV_ALIGN_BOTTOM_RIGHT, -20, -5);  // 放在时间下方
+    
+    // 创建欢迎界面上的WiFi图标
+    lv_obj_t* welcome_network_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(welcome_network_label, fonts_.icon_font, 0);
+    lv_obj_set_style_text_color(welcome_network_label, lv_color_white(), 0);
+    lv_label_set_text(welcome_network_label, "");  // 初始为空，将通过UpdateNetworkIcon更新
+    lv_obj_align(welcome_network_label, LV_ALIGN_BOTTOM_RIGHT, -60, -5);  // 放在电池图标左侧
+    
+    // 保存这些标签的引用，以便稍后更新
+    welcome_battery_label_ = welcome_battery_label;
+    welcome_network_label_ = welcome_network_label;
     
     // 初始时显示欢迎界面，隐藏聊天界面和状态栏
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
