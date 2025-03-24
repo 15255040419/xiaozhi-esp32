@@ -27,6 +27,11 @@ protected:
     lv_obj_t* welcome_battery_label_ = nullptr;
     lv_obj_t* welcome_network_label_ = nullptr;
 
+    // 时钟显示标签
+    lv_obj_t* hour_label_ = nullptr;
+    lv_obj_t* colon_label_ = nullptr;
+    lv_obj_t* minute_label_ = nullptr;
+
     void SetupUI();
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;

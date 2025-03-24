@@ -12,9 +12,10 @@
 
 #include "board.h"
 #include <ctime>
+#include "esp_timer.h"
 
 // 添加时间字体声明
-extern const lv_font_t font_time;
+LV_FONT_DECLARE(font_time);
 
 #define TAG "LcdDisplay"
 
@@ -82,6 +83,19 @@ static const ThemeColors LIGHT_THEME = {
 // Current theme - initialize based on default config
 static ThemeColors current_theme = DARK_THEME;
 
+// 添加一个静态变量来跟踪冒号的可见性
+static bool colon_visible = true;
+
+// 定时器回调函数
+static void colon_blink_timer_callback(void* arg) {
+    LcdDisplay* display = static_cast<LcdDisplay*>(arg);
+    if (display) {
+        // 切换冒号可见性
+        colon_visible = !colon_visible;
+        // 更新时间显示
+        display->ShowTimeAndDate();
+    }
+}
 
 LV_FONT_DECLARE(font_awesome_30_4);
 LV_FONT_DECLARE(font_dingding);
@@ -392,16 +406,6 @@ void LcdDisplay::SetupUI() {
     time_t now = time(nullptr);
     struct tm* timeinfo = localtime(&now);
     
-    // 格式化时间为 HH:MM 格式
-    char time_str[10];
-    if (timeinfo->tm_sec % 2 == 0) {
-        // 偶数秒显示冒号
-        strftime(time_str, sizeof(time_str), "%H:%M", timeinfo);
-    } else {
-        // 奇数秒隐藏冒号，用空格替代
-        strftime(time_str, sizeof(time_str), "%H %M", timeinfo);
-    }
-    
     // 获取日期和星期
     int day = timeinfo->tm_mday;
     const char* weekdays[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
@@ -418,12 +422,55 @@ void LcdDisplay::SetupUI() {
     lv_label_set_text(date_label, date_str);
     lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -80);  // 放在时间上方，根据字体大小调整位置
     
-    // 创建时间标签 - 使用font_time字体
-    lv_obj_t* time_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(time_label, &font_time, 0); // 使用font_time字体
-    lv_obj_set_style_text_color(time_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
-    lv_label_set_text(time_label, time_str);
-    lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -25);  // 放在右下角，根据字体大小调整位置
+    // 创建分离的时间标签
+    hour_label_ = lv_label_create(welcome_container_);
+    colon_label_ = lv_label_create(welcome_container_);
+    minute_label_ = lv_label_create(welcome_container_);
+    
+    // 设置字体和颜色
+    lv_obj_set_style_text_font(hour_label_, &font_time, 0);
+    lv_obj_set_style_text_font(colon_label_, &font_time, 0);
+    lv_obj_set_style_text_font(minute_label_, &font_time, 0);
+    lv_obj_set_style_text_color(hour_label_, lv_color_white(), 0);
+    lv_obj_set_style_text_color(colon_label_, lv_color_white(), 0);
+    lv_obj_set_style_text_color(minute_label_, lv_color_white(), 0);
+    
+    // 设置初始文本
+    lv_label_set_text(hour_label_, "00");
+    lv_label_set_text(colon_label_, ":");
+    lv_label_set_text(minute_label_, "00");
+    
+    // 设置固定宽度 - 使用足够大的值
+    lv_coord_t hour_width = 60;  // 根据您的字体大小调整
+    lv_coord_t minute_width = 60; // 根据您的字体大小调整
+    lv_obj_set_width(hour_label_, hour_width);
+    lv_obj_set_width(minute_label_, minute_width);
+    
+    // 设置文本对齐方式为居中
+    lv_obj_set_style_text_align(hour_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_align(minute_label_, LV_TEXT_ALIGN_CENTER, 0);
+    
+    // 获取冒号的实际宽度
+    lv_obj_update_layout(colon_label_);
+    lv_coord_t colon_width = lv_obj_get_width(colon_label_);
+    
+    // 定义标签之间的固定间距
+    lv_coord_t spacing = 5; // 可以根据需要调整
+    
+    // 计算总宽度
+    lv_coord_t total_width = hour_width + spacing + colon_width + spacing + minute_width;
+    
+    // 计算起始x坐标（从右边缘向左偏移）
+    lv_coord_t right_margin = 20; // 右边距
+    lv_coord_t start_x = LV_HOR_RES - right_margin - total_width;
+    
+    // 计算时间标签的垂直位置 - 在日期下方，电池图标上方
+    lv_coord_t time_y = LV_VER_RES - 85; // 距离底部85像素，可以根据需要调整
+    
+    // 设置每个标签的精确位置
+    lv_obj_set_pos(hour_label_, start_x, time_y);
+    lv_obj_set_pos(colon_label_, start_x + hour_width + spacing, time_y);
+    lv_obj_set_pos(minute_label_, start_x + hour_width + spacing + colon_width + spacing, time_y);
     
     // 创建欢迎界面上的电池图标
     lv_obj_t* welcome_battery_label = lv_label_create(welcome_container_);
@@ -446,6 +493,18 @@ void LcdDisplay::SetupUI() {
     // 初始时显示欢迎界面，隐藏聊天界面和状态栏
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN); // 隐藏整个container_，包括状态栏和聊天区域
+    
+    // 初始化冒号闪烁定时器
+    esp_timer_handle_t colon_timer;
+    esp_timer_create_args_t timer_args = {
+        .callback = &colon_blink_timer_callback,
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "colon_blink_timer"
+    };
+    
+    esp_timer_create(&timer_args, &colon_timer);
+    esp_timer_start_periodic(colon_timer, 1000000); // 1秒 = 1000000微秒
 }
 
 #define  MAX_MESSAGES 50
@@ -653,14 +712,36 @@ void LcdDisplay::ShowTimeAndDate() {
     time_t now = time(nullptr);
     struct tm* timeinfo = localtime(&now);
     
-    // 格式化时间为 HH:MM 格式，根据秒数的奇偶性决定冒号是否显示
-    char time_str[10];
-    if (timeinfo->tm_sec % 2 == 0) {
-        // 偶数秒显示冒号
-        strftime(time_str, sizeof(time_str), "%H:%M", timeinfo);
+    // 格式化小时和分钟
+    char hour_str[3];
+    char min_str[3];
+    snprintf(hour_str, sizeof(hour_str), "%02d", timeinfo->tm_hour);
+    snprintf(min_str, sizeof(min_str), "%02d", timeinfo->tm_min);
+    
+    // 更新小时和分钟标签
+    if (hour_label_ != nullptr) {
+        lv_label_set_text(hour_label_, hour_str);
+    }
+    
+    if (minute_label_ != nullptr) {
+        lv_label_set_text(minute_label_, min_str);
+    }
+    
+    // 控制冒号的可见性
+    if (colon_label_ != nullptr) {
+#if CONFIG_USE_WECHAT_MESSAGE_STYLE
+        // 在微信模式下，根据冒号可见性决定冒号的可见性
+        if (colon_visible) {
+            // 显示冒号
+            lv_obj_clear_flag(colon_label_, LV_OBJ_FLAG_HIDDEN);
     } else {
-        // 奇数秒隐藏冒号，用空格替代
-        strftime(time_str, sizeof(time_str), "%H %M", timeinfo);
+            // 隐藏冒号
+            lv_obj_add_flag(colon_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+#else
+        // 在普通模式下，始终显示冒号
+        lv_obj_clear_flag(colon_label_, LV_OBJ_FLAG_HIDDEN);
+#endif
     }
     
     // 获取日期和星期
@@ -672,25 +753,20 @@ void LcdDisplay::ShowTimeAndDate() {
     char date_str[20];
     snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
     
-    // 查找时间和日期标签
+    // 查找日期标签
     lv_obj_t* date_label = NULL;
-    lv_obj_t* time_label = NULL;
     
+    // 遍历welcome_container_的子对象，找到日期标签
     for (uint32_t i = 0; i < lv_obj_get_child_cnt(welcome_container_); i++) {
         lv_obj_t* child = lv_obj_get_child(welcome_container_, i);
-        if (child != NULL) {
-            // 假设第二个子对象是日期标签，第三个子对象是时间标签
-            if (i == 1) {
+        if (child != NULL && child != hour_label_ && child != colon_label_ && child != minute_label_ &&
+            child != welcome_battery_label_ && child != welcome_network_label_) {
+            // 假设第一个非时间标签、非图标的标签是日期标签
+            if (lv_obj_check_type(child, &lv_label_class)) {
                 date_label = child;
-            } else if (i == 2) {
-                time_label = child;
+                break;
             }
         }
-    }
-    
-    // 更新时间标签（每次调用都更新）
-    if (time_label != NULL) {
-        lv_label_set_text(time_label, time_str);
     }
     
     // 更新日期标签（只在日期变化时更新）
@@ -883,14 +959,57 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_font(date_label, fonts_.text_font, 0); // 使用状态栏相同的字体
     lv_obj_set_style_text_color(date_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
     lv_label_set_text(date_label, date_str);
-    lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -80);  // 放在时间上方，根据字体大小调整位置
+    lv_obj_align(date_label, LV_ALIGN_BOTTOM_RIGHT, -20, -60);  // 放在时间上方
     
-    // 创建时间标签 - 使用font_time字体
-    lv_obj_t* time_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(time_label, &font_time, 0); // 使用font_time字体
-    lv_obj_set_style_text_color(time_label, lv_color_white(), 0); // 使用白色文字以便在图片上清晰显示
-    lv_label_set_text(time_label, time_str);
-    lv_obj_align(time_label, LV_ALIGN_BOTTOM_RIGHT, -20, -25);  // 放在右下角，根据字体大小调整位置
+    // 创建分离的时间标签
+    hour_label_ = lv_label_create(welcome_container_);
+    colon_label_ = lv_label_create(welcome_container_);
+    minute_label_ = lv_label_create(welcome_container_);
+    
+    // 设置字体和颜色
+    lv_obj_set_style_text_font(hour_label_, &font_time, 0);
+    lv_obj_set_style_text_font(colon_label_, &font_time, 0);
+    lv_obj_set_style_text_font(minute_label_, &font_time, 0);
+    lv_obj_set_style_text_color(hour_label_, lv_color_white(), 0);
+    lv_obj_set_style_text_color(colon_label_, lv_color_white(), 0);
+    lv_obj_set_style_text_color(minute_label_, lv_color_white(), 0);
+    
+    // 设置初始文本
+    lv_label_set_text(hour_label_, "00");
+    lv_label_set_text(colon_label_, ":");
+    lv_label_set_text(minute_label_, "00");
+    
+    // 设置固定宽度 - 使用足够大的值
+    lv_coord_t hour_width = 60;  // 根据您的字体大小调整
+    lv_coord_t minute_width = 60; // 根据您的字体大小调整
+    lv_obj_set_width(hour_label_, hour_width);
+    lv_obj_set_width(minute_label_, minute_width);
+    
+    // 设置文本对齐方式为居中
+    lv_obj_set_style_text_align(hour_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_align(minute_label_, LV_TEXT_ALIGN_CENTER, 0);
+    
+    // 获取冒号的实际宽度
+    lv_obj_update_layout(colon_label_);
+    lv_coord_t colon_width = lv_obj_get_width(colon_label_);
+    
+    // 定义标签之间的固定间距
+    lv_coord_t spacing = 5; // 可以根据需要调整
+    
+    // 计算总宽度
+    lv_coord_t total_width = hour_width + spacing + colon_width + spacing + minute_width;
+    
+    // 计算起始x坐标（从右边缘向左偏移）
+    lv_coord_t right_margin = 20; // 右边距
+    lv_coord_t start_x = LV_HOR_RES - right_margin - total_width;
+    
+    // 计算时间标签的垂直位置 - 在日期下方，电池图标上方
+    lv_coord_t time_y = LV_VER_RES - 40; // 距离底部40像素，可以根据需要调整
+    
+    // 设置每个标签的精确位置
+    lv_obj_set_pos(hour_label_, start_x, time_y);
+    lv_obj_set_pos(colon_label_, start_x + hour_width + spacing, time_y);
+    lv_obj_set_pos(minute_label_, start_x + hour_width + spacing + colon_width + spacing, time_y);
     
     // 创建欢迎界面上的电池图标
     lv_obj_t* welcome_battery_label = lv_label_create(welcome_container_);
@@ -913,6 +1032,18 @@ void LcdDisplay::SetupUI() {
     // 初始时显示欢迎界面，隐藏聊天界面和状态栏
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN); // 隐藏整个container_，包括状态栏和聊天区域
+    
+    // 初始化冒号闪烁定时器
+    esp_timer_handle_t colon_timer;
+    esp_timer_create_args_t timer_args = {
+        .callback = &colon_blink_timer_callback,
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "colon_blink_timer"
+    };
+    
+    esp_timer_create(&timer_args, &colon_timer);
+    esp_timer_start_periodic(colon_timer, 1000000); // 1秒 = 1000000微秒
 }
 #endif
 
