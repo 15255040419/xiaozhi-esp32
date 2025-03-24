@@ -418,9 +418,30 @@ void LcdDisplay::SetupUI() {
     
     // 创建背景图片
     bg_img_ = lv_img_create(welcome_container_);
-    lv_img_set_src(bg_img_, &bizhi);
-    lv_obj_align(bg_img_, LV_ALIGN_CENTER, 0, 0);
-    current_wallpaper_index_ = 0; // 初始化为第一个壁纸
+    
+    // 从NVS读取上次保存的壁纸设置
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("storage", NVS_READWRITE, &handle);
+    if (err == ESP_OK) {
+        uint8_t saved_index;
+        err = nvs_get_u8(handle, "wallpaper", &saved_index);
+        if (err == ESP_OK) {
+            current_wallpaper_index_ = saved_index;
+        } else {
+            current_wallpaper_index_ = 0; // 如果没有保存的设置，使用第一个壁纸
+        }
+        nvs_close(handle);
+    }
+
+    // 设置壁纸
+    if (current_wallpaper_index_ >= WALLPAPER_COUNT) {
+        current_wallpaper_index_ = 0;
+    }
+    lv_img_set_src(bg_img_, wallpapers[current_wallpaper_index_]);
+    lv_obj_set_size(bg_img_, LV_PCT(100), LV_PCT(100));
+    lv_obj_center(bg_img_);
+    lv_obj_set_style_img_recolor_opa(bg_img_, 50, 0);
+    lv_obj_set_style_img_recolor(bg_img_, lv_color_black(), 0);
     
     // 获取当前时间和日期
     time_t now = time(nullptr);
@@ -852,15 +873,6 @@ void LcdDisplay::UpdateNetworkIcon(const char* icon) {
 }
 
 void LcdDisplay::ChangeWallpaper(const char* direction) {
-    static int current_wallpaper = 0;
-    static const lv_img_dsc_t* wallpapers[] = {
-        &bizhi,  // 默认壁纸
-        &wallpaper1,
-        &wallpaper2, 
-        &wallpaper3
-    };
-    static const int WALLPAPER_COUNT = sizeof(wallpapers) / sizeof(wallpapers[0]);
-
     DisplayLockGuard lock(this);
 
     if (bg_img_ == nullptr) {
@@ -869,15 +881,24 @@ void LcdDisplay::ChangeWallpaper(const char* direction) {
     }
 
     if (strcmp(direction, "next") == 0) {
-        current_wallpaper = (current_wallpaper + 1) % WALLPAPER_COUNT;
+        current_wallpaper_index_ = (current_wallpaper_index_ + 1) % WALLPAPER_COUNT;
     } else if (strcmp(direction, "previous") == 0) {
-        current_wallpaper = (current_wallpaper - 1 + WALLPAPER_COUNT) % WALLPAPER_COUNT;
+        current_wallpaper_index_ = (current_wallpaper_index_ - 1 + WALLPAPER_COUNT) % WALLPAPER_COUNT;
     }
 
-    ESP_LOGI(TAG, "Changing wallpaper to index %d", current_wallpaper);
+    ESP_LOGI(TAG, "Changing wallpaper to index %d", current_wallpaper_index_);
     
     // 设置新壁纸
-    lv_img_set_src(bg_img_, wallpapers[current_wallpaper]);
+    lv_img_set_src(bg_img_, wallpapers[current_wallpaper_index_]);
+
+    // 保存当前壁纸设置到NVS
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("storage", NVS_READWRITE, &handle);
+    if (err == ESP_OK) {
+        nvs_set_u8(handle, "wallpaper", current_wallpaper_index_);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
 }
 
 void LcdDisplay::SetEmotion(const char* emotion) {
