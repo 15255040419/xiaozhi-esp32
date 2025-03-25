@@ -26,6 +26,7 @@ protected:
     // 欢迎界面上的电池和网络图标
     lv_obj_t* welcome_battery_label_ = nullptr;
     lv_obj_t* welcome_network_label_ = nullptr;
+    lv_obj_t* welcome_mute_label_ = nullptr;
 
     // 时钟显示标签
     lv_obj_t* hour_label_ = nullptr;

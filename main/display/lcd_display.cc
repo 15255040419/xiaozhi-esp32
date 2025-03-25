@@ -532,9 +532,17 @@ void LcdDisplay::SetupUI() {
     lv_label_set_text(welcome_network_label, "");
     lv_obj_align(welcome_network_label, LV_ALIGN_TOP_RIGHT, -40, 5);
     
+    // 创建欢迎界面上的静音图标
+    lv_obj_t* welcome_mute_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(welcome_mute_label, fonts_.icon_font, 0);
+    lv_obj_set_style_text_color(welcome_mute_label, lv_color_white(), 0);
+    lv_label_set_text(welcome_mute_label, "");
+    lv_obj_align(welcome_mute_label, LV_ALIGN_TOP_RIGHT, -70, 5);
+    
     // 保存这些标签的引用，以便稍后更新
     welcome_battery_label_ = welcome_battery_label;
     welcome_network_label_ = welcome_network_label;
+    welcome_mute_label_ = welcome_mute_label;
     
     // 初始时显示欢迎界面，隐藏聊天界面和状态栏
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
@@ -840,6 +848,14 @@ void LcdDisplay::ShowTimeAndDate() {
         const char* network_text = lv_label_get_text(network_label_);
         if (network_text && strlen(network_text) > 0) {
             lv_label_set_text(welcome_network_label_, network_text);
+        }
+    }
+    
+    // 同步欢迎界面上的静音图标
+    if (welcome_mute_label_ != nullptr && mute_label_ != nullptr) {
+        const char* mute_text = lv_label_get_text(mute_label_);
+        if (mute_text) {
+            lv_label_set_text(welcome_mute_label_, mute_text);
         }
     }
 }
