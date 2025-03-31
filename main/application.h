@@ -70,7 +70,6 @@ public:
     void WakeWordInvoke(const std::string& wake_word);
     void PlaySound(const std::string_view& sound);
     bool CanEnterSleepMode();
-    bool CheckNewVersion();
 
 private:
     Application();
@@ -120,6 +119,7 @@ private:
     void ReadAudio(std::vector<int16_t>& data, int sample_rate, int samples);
     void ResetDecoder();
     void SetDecodeSampleRate(int sample_rate, int frame_duration);
+    void CheckNewVersion();
     void ShowActivationCode();
     void OnClockTimer();
     void SetListeningMode(ListeningMode mode);

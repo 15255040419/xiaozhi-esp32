@@ -62,7 +62,7 @@ Application::~Application() {
     vEventGroupDelete(event_group_);
 }
 
-bool Application::CheckNewVersion() {
+void Application::CheckNewVersion() {
     auto& board = Board::GetInstance();
     auto display = board.GetDisplay();
     // Check if there is a new firmware version available
@@ -76,7 +76,7 @@ bool Application::CheckNewVersion() {
             retry_count++;
             if (retry_count >= MAX_RETRY) {
                 ESP_LOGE(TAG, "Too many retries, exit version check");
-                return false;
+                return;
             }
             ESP_LOGW(TAG, "Check new version failed, retry in %d seconds (%d/%d)", 60, retry_count, MAX_RETRY);
             vTaskDelay(pdMS_TO_TICKS(60000));
@@ -130,7 +130,7 @@ bool Application::CheckNewVersion() {
                 Reboot();
             });
 
-            return true;
+            return;
         }
 
         // No new version, mark the current version as valid
@@ -174,7 +174,7 @@ bool Application::CheckNewVersion() {
         }
     }
     
-    return true;
+    return;
 }
 
 void Application::ShowActivationCode() {
@@ -769,10 +769,7 @@ void Application::SetDeviceState(DeviceState state) {
             
             // 在空闲状态时，切换回欢迎界面
             display->SetChatMessage("system", "");
-            
-            // 立即更新一次时间显示
-            display->ShowTimeAndDate();
-            
+                      
 #if CONFIG_USE_AUDIO_PROCESSOR
             audio_processor_.Stop();
 #endif
