@@ -395,19 +395,19 @@ void LcdDisplay::SetupUI() {
     lv_obj_t* welcome_label = lv_label_create(welcome_container_);
     lv_obj_set_style_text_font(welcome_label, &font_dingding, 0);
     lv_obj_set_style_text_color(welcome_label, current_theme.text, 0);
-    lv_label_set_text(welcome_label, "赐 福");
+    lv_label_set_text(welcome_label, "方便面的工作室");
     lv_obj_set_style_text_align(welcome_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(welcome_label, LV_HOR_RES - 20);//设置宽度:屏幕宽度-20
     lv_obj_align(welcome_label, LV_ALIGN_CENTER, 0, -10);  // （0居中显示—）-10距离屏幕顶部-10像素
     
     // 创建小字体的英文标签
-    //lv_obj_t* sub_label = lv_label_create(welcome_container_);
-    //lv_obj_set_style_text_font(sub_label, fonts_.text_font, 0);  // 使用较小的字体
-    //lv_obj_set_style_text_color(sub_label, current_theme.text, 0);
-    //lv_label_set_text(sub_label, "FANG BIAN MIAN");
-    //lv_obj_set_style_text_align(sub_label, LV_TEXT_ALIGN_CENTER, 0);
-    //lv_obj_set_width(sub_label, LV_HOR_RES - 20);
-    //lv_obj_align(sub_label, LV_ALIGN_CENTER, 0, 30);  // 在主标签下方显示
+    lv_obj_t* sub_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(sub_label, fonts_.text_font, 0);  // 使用较小的字体
+    lv_obj_set_style_text_color(sub_label, current_theme.text, 0);
+    lv_label_set_text(sub_label, "FANG BIAN MIAN");
+    lv_obj_set_style_text_align(sub_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(sub_label, LV_HOR_RES - 20);
+    lv_obj_align(sub_label, LV_ALIGN_CENTER, 0, 30);  // 在主标签下方显示
     
     // 初始时显示欢迎界面，隐藏聊天界面
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
@@ -690,46 +690,6 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_color(low_battery_label, lv_color_white(), 0);
     lv_obj_center(low_battery_label);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
-
-    // 创建欢迎容器 - 放在与content_相同的位置
-    welcome_container_ = lv_obj_create(container_);
-    lv_obj_set_style_radius(welcome_container_, 0, 0);
-    lv_obj_set_width(welcome_container_, LV_HOR_RES);
-    lv_obj_set_flex_grow(welcome_container_, 1);
-    lv_obj_set_style_pad_all(welcome_container_, 5, 0);
-    lv_obj_set_style_bg_color(welcome_container_, current_theme.chat_background, 0);
-    lv_obj_set_style_border_width(welcome_container_, 0, 0);
-    
-    // 创建提示文本标签（靠左显示）
-    //lv_obj_t* hint_label = lv_label_create(welcome_container_);
-    //lv_obj_set_style_text_font(hint_label, &font_dingding, 0);
-    //lv_obj_set_style_text_color(hint_label, current_theme.text, 0);
-    //lv_label_set_text(hint_label, "讯息:");
-    //lv_obj_set_style_text_align(hint_label, LV_TEXT_ALIGN_LEFT, 0);
-    //lv_obj_set_width(hint_label, LV_HOR_RES - 20);
-    //lv_obj_align(hint_label, LV_ALIGN_TOP_LEFT, 10, 20);  // 将y偏移从10改为30，让标签往下移动20个像素
-    
-    // 创建主欢迎信息标签
-    lv_obj_t* welcome_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(welcome_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(welcome_label, current_theme.text, 0);
-    lv_label_set_text(welcome_label, "赐 福");
-    lv_obj_set_style_text_align(welcome_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(welcome_label, LV_HOR_RES - 20);
-    lv_obj_align(welcome_label, LV_ALIGN_CENTER, 0, -10);  // 居中显示
-    
-    // 创建小字体的英文标签
-    //lv_obj_t* sub_label = lv_label_create(welcome_container_);
-    //lv_obj_set_style_text_font(sub_label, fonts_.text_font, 0);  // 使用较小的字体
-    //lv_obj_set_style_text_color(sub_label, current_theme.text, 0);
-    //lv_label_set_text(sub_label, "FANG BIAN MIAN");
-    //lv_obj_set_style_text_align(sub_label, LV_TEXT_ALIGN_CENTER, 0);
-    //lv_obj_set_width(sub_label, LV_HOR_RES - 20);
-    lv_obj_align(sub_label, LV_ALIGN_CENTER, 0, 30);  // 在主标签下方显示
-    
-    // 初始时显示欢迎界面，隐藏聊天界面
-    lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(content_, LV_OBJ_FLAG_HIDDEN); // 只隐藏聊天区域，不隐藏整个container_
 }
 #endif
 
@@ -875,6 +835,22 @@ void LcdDisplay::SetTheme(const std::string& theme_name) {
                 lv_obj_t* welcome_label = lv_obj_get_child(welcome_container_, 0);
                 if (welcome_label != nullptr) {
                     lv_obj_set_style_text_color(welcome_label, current_theme.text, 0);
+                }
+                
+                // 更新英文标签的文本颜色
+                if (lv_obj_get_child_cnt(welcome_container_) > 1) {
+                    lv_obj_t* sub_label = lv_obj_get_child(welcome_container_, 1);
+                    if (sub_label != nullptr) {
+                        lv_obj_set_style_text_color(sub_label, current_theme.text, 0);
+                    }
+                }
+                
+                // 更新提示文本标签的颜色（如果存在）
+                if (lv_obj_get_child_cnt(welcome_container_) > 2) {
+                    lv_obj_t* hint_label = lv_obj_get_child(welcome_container_, 2);
+                    if (hint_label != nullptr) {
+                        lv_obj_set_style_text_color(hint_label, current_theme.text, 0);
+                    }
                 }
             }
         }
