@@ -362,7 +362,7 @@ void Application::Start() {
         Application* app = (Application*)arg;
         app->MainLoop();
         vTaskDelete(NULL);
-    }, "main_loop", 4096, this, 4, &main_loop_task_handle_, 0);
+    }, "main_loop", 4096 * 2, this, 4, &main_loop_task_handle_, 0);
 
     /* Wait for the network to be ready */
     board.StartNetwork();
@@ -578,20 +578,6 @@ void Application::OnClockTimer() {
             strftime(time_str, sizeof(time_str), "%H:%M  ", localtime(&now));
             display->SetStatus(time_str);
         }
-    }
-
-    // 每10秒打印一次调试信息
-    if (clock_ticks_ % 10 == 0) {
-        int free_sram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-        int min_free_sram = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
-        ESP_LOGI(TAG, "Free internal: %u minimal internal: %u", free_sram, min_free_sram);
-    }
-
-    // 每10秒打印一次调试信息
-    if (clock_ticks_ % 10 == 0) {
-        int free_sram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-        int min_free_sram = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
-        ESP_LOGI(TAG, "Free internal: %u minimal internal: %u", free_sram, min_free_sram);
     }
 }
 
