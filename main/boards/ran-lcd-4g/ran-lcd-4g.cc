@@ -10,12 +10,20 @@
 #include "led/single_led.h"
 #include "assets/lang_config.h"
 #include "../xingzhi-cube-1.54tft-wifi/power_manager.h"
+#include "font_awesome_symbols.h"
+#include "system_info.h"
+#include "settings.h"
 
 #include <esp_log.h>
 #include <esp_lcd_panel_vendor.h>
 
 #include <driver/rtc_io.h>
 #include <esp_sleep.h>
+#include <nvs_flash.h>
+#include <nvs.h>
+#include <wifi_station.h>
+#include <wifi_configuration_ap.h>
+#include <ssid_manager.h>
 
 #define TAG "RAN_LCD_4G"
 
@@ -33,6 +41,8 @@ private:
     PowerManager* power_manager_;
     esp_lcd_panel_io_handle_t panel_io_ = nullptr;
     esp_lcd_panel_handle_t panel_ = nullptr;
+    bool use_4g_ = true; // 默认使用4G网络
+    bool wifi_config_mode_ = false;
 
     void InitializePowerManager() {
         power_manager_ = new PowerManager(GPIO_NUM_38);
@@ -84,11 +94,142 @@ private:
         ESP_ERROR_CHECK(spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO));
     }
 
+    // 从NVS中加载网络模式设置
+    void LoadNetworkMode() {
+        nvs_handle_t nvs_handle;
+        esp_err_t err = nvs_open("network", NVS_READONLY, &nvs_handle);
+        if (err == ESP_OK) {
+            uint8_t mode = 1; // 默认使用4G
+            err = nvs_get_u8(nvs_handle, "mode", &mode);
+            if (err == ESP_OK) {
+                use_4g_ = (mode == 1);
+                ESP_LOGI(TAG, "加载网络模式: %s", use_4g_ ? "4G" : "Wi-Fi");
+            }
+            nvs_close(nvs_handle);
+        }
+    }
+
+    // 保存网络模式设置到NVS
+    void SaveNetworkMode() {
+        nvs_handle_t nvs_handle;
+        esp_err_t err = nvs_open("network", NVS_READWRITE, &nvs_handle);
+        if (err == ESP_OK) {
+            err = nvs_set_u8(nvs_handle, "mode", use_4g_ ? 1 : 0);
+            if (err == ESP_OK) {
+                nvs_commit(nvs_handle);
+                ESP_LOGI(TAG, "保存网络模式: %s", use_4g_ ? "4G" : "Wi-Fi");
+            }
+            nvs_close(nvs_handle);
+        }
+    }
+
+    // 切换网络模式
+    void ToggleNetworkMode() {
+        power_save_timer_->WakeUp();
+        use_4g_ = !use_4g_;
+        SaveNetworkMode();
+        
+        // 显示切换提示
+        std::string network_mode = use_4g_ ? "4G模式" : "Wi-Fi模式";
+        std::string message = "正在切换到" + network_mode + "\n设备将重启...";
+        display_->SetChatMessage("system", message.c_str());
+        display_->SetEmotion("thinking");
+        
+        // 延迟2秒后重启
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        esp_restart();
+    }
+
+    // 进入Wi-Fi配置模式
+    void EnterWifiConfigMode() {
+        auto& application = Application::GetInstance();
+        application.SetDeviceState(kDeviceStateWifiConfiguring);
+
+        auto& wifi_ap = WifiConfigurationAp::GetInstance();
+        wifi_ap.SetLanguage(Lang::CODE);
+        wifi_ap.SetSsidPrefix("Xiaozhi");
+        wifi_ap.Start();
+
+        // 显示 WiFi 配置 AP 的 SSID 和 Web 服务器 URL
+        std::string hint = Lang::Strings::CONNECT_TO_HOTSPOT;
+        hint += wifi_ap.GetSsid();
+        hint += Lang::Strings::ACCESS_VIA_BROWSER;
+        hint += wifi_ap.GetWebServerUrl();
+        hint += "\n\n";
+        
+        // 播报配置 WiFi 的提示
+        application.Alert(Lang::Strings::WIFI_CONFIG_MODE, hint.c_str(), "", Lang::Sounds::P3_WIFICONFIG);
+        
+        // Wait forever until reset after configuration
+        while (true) {
+            vTaskDelay(pdMS_TO_TICKS(10000));
+        }
+    }
+
+    // 启动Wi-Fi连接
+    void StartWifiNetwork() {
+        // 检查是否需要进入Wi-Fi配置模式
+        if (wifi_config_mode_) {
+            EnterWifiConfigMode();
+            return;
+        }
+
+        // 检查是否有保存的Wi-Fi配置
+        auto& ssid_manager = SsidManager::GetInstance();
+        auto ssid_list = ssid_manager.GetSsidList();
+        if (ssid_list.empty()) {
+            wifi_config_mode_ = true;
+            EnterWifiConfigMode();
+            return;
+        }
+
+        // 连接Wi-Fi
+        auto& wifi_station = WifiStation::GetInstance();
+        wifi_station.OnScanBegin([this]() {
+            display_->ShowNotification(Lang::Strings::SCANNING_WIFI, 30000);
+        });
+        wifi_station.OnConnect([this](const std::string& ssid) {
+            std::string notification = Lang::Strings::CONNECT_TO;
+            notification += ssid;
+            notification += "...";
+            display_->ShowNotification(notification.c_str(), 30000);
+        });
+        wifi_station.OnConnected([this](const std::string& ssid) {
+            std::string notification = Lang::Strings::CONNECTED_TO;
+            notification += ssid;
+            display_->ShowNotification(notification.c_str(), 30000);
+            display_->SetStatus("Wi-Fi");
+        });
+        wifi_station.Start();
+
+        // 等待Wi-Fi连接成功，如果失败则进入配置模式
+        if (!wifi_station.WaitForConnected(60 * 1000)) {
+            wifi_station.Stop();
+            wifi_config_mode_ = true;
+            EnterWifiConfigMode();
+            return;
+        }
+    }
+
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             power_save_timer_->WakeUp();
             auto& app = Application::GetInstance();
             app.ToggleChatState();
+        });
+
+        // 添加按下和松开事件，用于语音唤醒
+        boot_button_.OnPressDown([this]() {
+            Application::GetInstance().StartListening();
+        });
+        
+        boot_button_.OnPressUp([this]() {
+            Application::GetInstance().StopListening();
+        });
+
+        // 添加长按切换网络模式
+        boot_button_.OnLongPress([this]() {
+            ToggleNetworkMode();
         });
 
         volume_up_button_.OnClick([this]() {
@@ -178,6 +319,9 @@ public:
         boot_button_(BOOT_BUTTON_GPIO),
         volume_up_button_(VOLUME_UP_BUTTON_GPIO),
         volume_down_button_(VOLUME_DOWN_BUTTON_GPIO) {
+        // 加载网络模式设置
+        LoadNetworkMode();
+        
         InitializePowerManager();
         InitializePowerSaveTimer();
         InitializeSpi();
@@ -185,6 +329,13 @@ public:
         InitializeSt7789Display();  
         InitializeIot();
         GetBacklight()->RestoreBrightness();
+        
+        // 显示当前网络模式
+        std::string network_mode = use_4g_ ? "4G模式" : "Wi-Fi模式";
+        std::string message = "当前网络: " + network_mode;
+        display_->SetChatMessage("system", message.c_str());
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        display_->SetChatMessage("system", "");
     }
 
     virtual AudioCodec* GetAudioCodec() override {
@@ -219,6 +370,82 @@ public:
             power_save_timer_->WakeUp();
         }
         Ml307Board::SetPowerSaveMode(enabled);
+    }
+    
+    // 重写网络连接方法，根据当前模式决定使用4G还是Wi-Fi
+    virtual void StartNetwork() override {
+        if (use_4g_) {
+            // 使用4G连接
+            ESP_LOGI(TAG, "使用4G连接");
+            display_->SetStatus("4G");
+            // 调用Ml307Board的StartNetwork方法
+            Ml307Board::StartNetwork();
+        } else {
+            // 使用Wi-Fi连接
+            ESP_LOGI(TAG, "使用Wi-Fi连接");
+            display_->SetStatus("Wi-Fi");
+            // 启动Wi-Fi连接
+            StartWifiNetwork();
+        }
+    }
+    
+    // 重写获取网络状态图标的方法
+    virtual const char* GetNetworkStateIcon() override {
+        if (use_4g_) {
+            // 使用4G模式，调用Ml307Board的方法
+            return Ml307Board::GetNetworkStateIcon();
+        } else {
+            // 使用Wi-Fi模式，返回Wi-Fi图标
+            if (wifi_config_mode_) {
+                return FONT_AWESOME_WIFI;
+            }
+            auto& wifi_station = WifiStation::GetInstance();
+            if (!wifi_station.IsConnected()) {
+                return FONT_AWESOME_WIFI_OFF;
+            }
+            int8_t rssi = wifi_station.GetRssi();
+            if (rssi >= -60) {
+                return FONT_AWESOME_WIFI;
+            } else if (rssi >= -70) {
+                return FONT_AWESOME_WIFI_FAIR;
+            } else {
+                return FONT_AWESOME_WIFI_WEAK;
+            }
+        }
+    }
+    
+    // 重写获取板子JSON信息的方法
+    virtual std::string GetBoardJson() override {
+        if (use_4g_) {
+            // 使用4G模式，调用Ml307Board的方法
+            return Ml307Board::GetBoardJson();
+        } else {
+            // 使用Wi-Fi模式，返回Wi-Fi信息
+            auto& wifi_station = WifiStation::GetInstance();
+            std::string board_json = std::string("{\"type\":\"" BOARD_TYPE "\",");
+            board_json += "\"name\":\"" BOARD_NAME "\",";
+            if (!wifi_config_mode_) {
+                board_json += "\"ssid\":\"" + wifi_station.GetSsid() + "\",";
+                board_json += "\"rssi\":" + std::to_string(wifi_station.GetRssi()) + ",";
+                board_json += "\"channel\":" + std::to_string(wifi_station.GetChannel()) + ",";
+                board_json += "\"ip\":\"" + wifi_station.GetIpAddress() + "\",";
+            }
+            board_json += "\"mac\":\"" + SystemInfo::GetMacAddress() + "\"}";
+            return board_json;
+        }
+    }
+    
+    // 重置Wi-Fi配置
+    void ResetWifiConfiguration() {
+        // 设置标志并重启设备进入网络配置模式
+        {
+            Settings settings("wifi", true);
+            settings.SetInt("force_ap", 1);
+        }
+        GetDisplay()->ShowNotification(Lang::Strings::ENTERING_WIFI_CONFIG_MODE);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        // 重启设备
+        esp_restart();
     }
 };
 
