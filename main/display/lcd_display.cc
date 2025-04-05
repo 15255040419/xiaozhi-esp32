@@ -1598,4 +1598,15 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
         }
         return; // 避免创建空消息框
     }
+
+#if CONFIG_USE_WECHAT_MESSAGE_STYLE
+    // 微信模式下的消息气泡创建代码
+    // 这里应该是原有的微信模式代码
+    // ...
+#else
+    // 普通模式下的消息显示
+    if (chat_message_label_ != nullptr) {
+        lv_label_set_text(chat_message_label_, content);
+    }
+#endif
 }
