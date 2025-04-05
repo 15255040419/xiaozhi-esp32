@@ -17,7 +17,7 @@
 // 添加时间字体声明
 LV_FONT_DECLARE(font_time);
 
-// 在文件顶部添加字体声明（如果尚未添加）
+// 在文件顶部添加字体声明
 LV_FONT_DECLARE(font_dingding);
 
 // 在文件顶部添加壁纸声明
@@ -104,7 +104,6 @@ static const ThemeColors LIGHT_THEME = {
 static ThemeColors current_theme = DARK_THEME;
 
 // 添加一个静态变量来跟踪冒号的可见性
-#if CONFIG_USE_WECHAT_MESSAGE_STYLE
 static bool colon_visible = true;
 
 // 定时器回调函数
@@ -117,7 +116,6 @@ static void colon_blink_timer_callback(void* arg) {
         display->ShowTimeAndDate();
     }
 }
-#endif
 
 LV_FONT_DECLARE(font_awesome_30_4);
 LV_FONT_DECLARE(font_dingding);
@@ -785,7 +783,6 @@ void LcdDisplay::ShowTimeAndDate() {
     
     // 控制冒号的可见性
     if (colon_label_ != nullptr) {
-        // 在微信模式下，根据冒号可见性决定冒号的可见性
         if (colon_visible) {
             // 显示冒号
             lv_obj_clear_flag(colon_label_, LV_OBJ_FLAG_HIDDEN);
@@ -1008,32 +1005,312 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_color(low_battery_label, lv_color_white(), 0);
     lv_obj_center(low_battery_label);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
-}
 
+	    // 创建欢迎容器 - 直接放在屏幕上，而不是container_中
+    welcome_container_ = lv_obj_create(screen);
+    lv_obj_set_style_radius(welcome_container_, 0, 0);
+    lv_obj_set_size(welcome_container_, LV_HOR_RES, LV_VER_RES); // 设置为全屏大小
+    lv_obj_set_style_pad_all(welcome_container_, 0, 0);
+    lv_obj_set_style_border_width(welcome_container_, 0, 0); // 移除边框
+    
+    // 创建背景图片
+    bg_img_ = lv_img_create(welcome_container_);
+    
+    // 从NVS读取上次保存的壁纸设置
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("storage", NVS_READWRITE, &handle);
+    if (err == ESP_OK) {
+        uint8_t saved_index;
+        err = nvs_get_u8(handle, "wallpaper", &saved_index);
+        if (err == ESP_OK) {
+            current_wallpaper_index_ = saved_index;
+        } else {
+            current_wallpaper_index_ = 0; // 如果没有保存的设置，使用第一个壁纸
+        }
+        nvs_close(handle);
+    }
+
+    // 设置壁纸
+    if (current_wallpaper_index_ >= WALLPAPER_COUNT) {
+        current_wallpaper_index_ = 0;
+    }
+    lv_img_set_src(bg_img_, wallpapers[current_wallpaper_index_]);
+    lv_obj_set_size(bg_img_, LV_PCT(100), LV_PCT(100));
+    lv_obj_center(bg_img_);
+    lv_obj_set_style_img_recolor_opa(bg_img_, 50, 0);
+    lv_obj_set_style_img_recolor(bg_img_, lv_color_black(), 0);
+    
+    // 获取当前时间和日期
+    time_t now = time(nullptr);
+    struct tm* timeinfo = localtime(&now);
+    
+    // 获取日期和星期
+    int day = timeinfo->tm_mday;
+    const char* weekdays[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+    const char* weekday = weekdays[timeinfo->tm_wday];
+    
+    // 格式化日期为 "23 周日" 格式
+    char date_str[20];
+    snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
+    
+    // 创建日期标签 - 使用丁丁字体
+    lv_obj_t* date_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(date_label, &font_dingding, 0);
+    lv_obj_set_style_text_color(date_label, lv_color_white(), 0);
+    lv_label_set_text(date_label, date_str);
+    lv_obj_align(date_label, LV_ALIGN_TOP_RIGHT, -10, 90);
+    
+    // 创建分离的时间标签
+    hour_label_ = lv_label_create(welcome_container_);
+    colon_label_ = lv_label_create(welcome_container_);
+    minute_label_ = lv_label_create(welcome_container_);
+    
+    // 设置字体和颜色
+    lv_obj_set_style_text_font(hour_label_, &font_time, 0);
+    lv_obj_set_style_text_font(colon_label_, &font_time, 0);
+    lv_obj_set_style_text_font(minute_label_, &font_time, 0);
+    lv_obj_set_style_text_color(hour_label_, lv_color_white(), 0);
+    lv_obj_set_style_text_color(colon_label_, lv_color_white(), 0);
+    lv_obj_set_style_text_color(minute_label_, lv_color_white(), 0);
+    
+    // 设置初始文本
+    lv_label_set_text(hour_label_, "00");
+    lv_label_set_text(colon_label_, ":");
+    lv_label_set_text(minute_label_, "00");
+    
+    // 禁用标签的自动换行
+    lv_label_set_long_mode(hour_label_, LV_LABEL_LONG_CLIP);
+    lv_label_set_long_mode(colon_label_, LV_LABEL_LONG_CLIP);
+    lv_label_set_long_mode(minute_label_, LV_LABEL_LONG_CLIP);
+    
+    // 设置固定宽度 - 为40号字体设置更大的宽度
+    lv_coord_t hour_width = 60;  // 为40号字体增加宽度
+    lv_coord_t minute_width = 60; // 为40号字体增加宽度
+    lv_obj_set_width(hour_label_, hour_width);
+    lv_obj_set_width(minute_label_, minute_width);
+    
+    // 设置文本对齐方式为居中
+    lv_obj_set_style_text_align(hour_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_align(minute_label_, LV_TEXT_ALIGN_CENTER, 0);
+    
+    // 获取冒号的实际宽度
+    lv_obj_update_layout(colon_label_);
+    lv_coord_t colon_width = lv_obj_get_width(colon_label_);
+    
+    // 定义标签之间的固定间距
+    lv_coord_t spacing = 2; // 为40号字体增加间距
+    
+    // 计算总宽度
+    lv_coord_t total_width = hour_width + spacing + colon_width + spacing + minute_width;
+    
+    // 计算起始x坐标（从右边缘向左偏移）
+    lv_coord_t right_margin = 5; // 右边距
+    lv_coord_t start_x = LV_HOR_RES - right_margin - total_width;
+    
+    // 计算时间标签的垂直位置 - 在日期下方，电池图标上方
+    lv_coord_t time_y = 40; // 距离顶部40像素，可以根据需要调整
+    
+    // 设置每个标签的精确位置
+    lv_obj_set_pos(hour_label_, LV_HOR_RES - hour_width - spacing - colon_width - spacing - minute_width - 10, time_y);
+    lv_obj_set_pos(colon_label_, LV_HOR_RES - colon_width - spacing - minute_width - 10, time_y);
+    lv_obj_set_pos(minute_label_, LV_HOR_RES - minute_width - 10, time_y);
+    
+    // 创建欢迎界面上的电池图标
+    lv_obj_t* welcome_battery_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(welcome_battery_label, fonts_.icon_font, 0);
+    lv_obj_set_style_text_color(welcome_battery_label, lv_color_white(), 0);
+    lv_label_set_text(welcome_battery_label, "");
+    lv_obj_align(welcome_battery_label, LV_ALIGN_TOP_RIGHT, -10, 5);
+    
+    // 创建欢迎界面上的WiFi图标
+    lv_obj_t* welcome_network_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(welcome_network_label, fonts_.icon_font, 0);
+    lv_obj_set_style_text_color(welcome_network_label, lv_color_white(), 0);
+    lv_label_set_text(welcome_network_label, "");
+    lv_obj_align(welcome_network_label, LV_ALIGN_TOP_RIGHT, -40, 5);
+    
+    // 创建欢迎界面上的静音图标
+    lv_obj_t* welcome_mute_label = lv_label_create(welcome_container_);
+    lv_obj_set_style_text_font(welcome_mute_label, fonts_.icon_font, 0);
+    lv_obj_set_style_text_color(welcome_mute_label, lv_color_white(), 0);
+    lv_label_set_text(welcome_mute_label, "");
+    lv_obj_align(welcome_mute_label, LV_ALIGN_TOP_RIGHT, -70, 5);
+    
+    // 保存这些标签的引用，以便稍后更新
+    welcome_battery_label_ = welcome_battery_label;
+    welcome_network_label_ = welcome_network_label;
+    welcome_mute_label_ = welcome_mute_label;
+    
+    // 初始时显示欢迎界面，隐藏聊天界面和状态栏
+    lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN); // 隐藏整个container_，包括状态栏和聊天区域
+    
+    // 初始化冒号闪烁定时器
+    esp_timer_handle_t colon_timer;
+    esp_timer_create_args_t timer_args = {
+        .callback = &colon_blink_timer_callback,
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "colon_blink_timer"
+    };
+    
+    esp_timer_create(&timer_args, &colon_timer);
+    esp_timer_start_periodic(colon_timer, 1000000); // 1秒 = 1000000微秒
+
+    // 强制立即更新一次时间显示，确保初始显示正确
+    ShowTimeAndDate();
+}
 void LcdDisplay::ShowTimeAndDate() {
-    // 普通模式下的空实现
-    // 不执行任何操作，但提供实现以避免链接错误
+    DisplayLockGuard lock(this);
+    
+    if (welcome_container_ == nullptr) {
+        return;
+    }
+    
+    // 获取当前时间和日期
+    time_t now = time(nullptr);
+    struct tm* timeinfo = localtime(&now);
+    
+    // 格式化小时和分钟
+    char hour_str[3];
+    char min_str[3];
+    snprintf(hour_str, sizeof(hour_str), "%02d", timeinfo->tm_hour);
+    snprintf(min_str, sizeof(min_str), "%02d", timeinfo->tm_min);
+    
+    // 更新小时和分钟标签
+    if (hour_label_ != nullptr) {
+        lv_label_set_text(hour_label_, hour_str);
+    }
+    
+    if (minute_label_ != nullptr) {
+        lv_label_set_text(minute_label_, min_str);
+    }
+    
+    // 控制冒号的可见性
+    if (colon_label_ != nullptr) {
+        if (colon_visible) {
+            // 显示冒号
+            lv_obj_clear_flag(colon_label_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            // 隐藏冒号
+            lv_obj_add_flag(colon_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    
+    // 获取日期和星期
+    int day = timeinfo->tm_mday;
+    const char* weekdays[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+    const char* weekday = weekdays[timeinfo->tm_wday];
+    
+    // 格式化日期为 "23 周日" 格式
+    char date_str[20];
+    snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
+    
+    // 查找日期标签
+    lv_obj_t* date_label = NULL;
+    
+    // 遍历welcome_container_的子对象，找到日期标签
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(welcome_container_); i++) {
+        lv_obj_t* child = lv_obj_get_child(welcome_container_, i);
+        if (child != NULL && child != hour_label_ && child != colon_label_ && child != minute_label_ &&
+            child != welcome_battery_label_ && child != welcome_network_label_) {
+            // 假设第一个非时间标签、非图标的标签是日期标签
+            if (lv_obj_check_type(child, &lv_label_class)) {
+                date_label = child;
+                break;
+            }
+        }
+    }
+    
+    // 更新日期标签（只在日期变化时更新）
+    static int last_day = -1;
+    static int last_wday = -1;
+    
+    if (date_label != NULL && (day != last_day || timeinfo->tm_wday != last_wday || last_day == -1)) {
+        lv_label_set_text(date_label, date_str);
+        last_day = day;
+        last_wday = timeinfo->tm_wday;
+    }
+    
+    // 同步欢迎界面上的电池和网络图标
+    if (welcome_battery_label_ != nullptr && battery_label_ != nullptr) {
+        const char* battery_text = lv_label_get_text(battery_label_);
+        if (battery_text && strlen(battery_text) > 0) {
+            lv_label_set_text(welcome_battery_label_, battery_text);
+        }
+    }
+    
+    if (welcome_network_label_ != nullptr && network_label_ != nullptr) {
+        const char* network_text = lv_label_get_text(network_label_);
+        if (network_text && strlen(network_text) > 0) {
+            lv_label_set_text(welcome_network_label_, network_text);
+        }
+    }
+    
+    // 同步欢迎界面上的静音图标
+    if (welcome_mute_label_ != nullptr && mute_label_ != nullptr) {
+        const char* mute_text = lv_label_get_text(mute_label_);
+        if (mute_text) {
+            lv_label_set_text(welcome_mute_label_, mute_text);
+        }
+    }
 }
 
 void LcdDisplay::UpdateBatteryIcon(const char* icon) {
     DisplayLockGuard lock(this);
-    // 在普通模式下只更新状态栏
+    
+    // 更新状态栏中的电池图标
     if (battery_label_ != nullptr) {
         lv_label_set_text(battery_label_, icon);
+    }
+    
+    // 同时更新欢迎界面中的电池图标
+    if (welcome_battery_label_ != nullptr) {
+        lv_label_set_text(welcome_battery_label_, icon);
     }
 }
 
 void LcdDisplay::UpdateNetworkIcon(const char* icon) {
     DisplayLockGuard lock(this);
-    // 在普通模式下只更新状态栏
+    
+    // 更新状态栏中的网络图标
     if (network_label_ != nullptr) {
         lv_label_set_text(network_label_, icon);
+    }
+    
+    // 同时更新欢迎界面中的网络图标
+    if (welcome_network_label_ != nullptr) {
+        lv_label_set_text(welcome_network_label_, icon);
     }
 }
 
 void LcdDisplay::ChangeWallpaper(const char* direction) {
-    // 普通模式下的空实现
-    ESP_LOGW(TAG, "Wallpaper feature not available in simple mode");
+    DisplayLockGuard lock(this);
+
+    if (bg_img_ == nullptr) {
+        ESP_LOGE(TAG, "Background image not initialized");
+        return;
+    }
+
+    if (strcmp(direction, "next") == 0) {
+        current_wallpaper_index_ = (current_wallpaper_index_ + 1) % WALLPAPER_COUNT;
+    } else if (strcmp(direction, "previous") == 0) {
+        current_wallpaper_index_ = (current_wallpaper_index_ - 1 + WALLPAPER_COUNT) % WALLPAPER_COUNT;
+    }
+
+    ESP_LOGI(TAG, "Changing wallpaper to index %d", current_wallpaper_index_);
+    
+    // 设置新壁纸
+    lv_img_set_src(bg_img_, wallpapers[current_wallpaper_index_]);
+
+    // 保存当前壁纸设置到NVS
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("storage", NVS_READWRITE, &handle);
+    if (err == ESP_OK) {
+        nvs_set_u8(handle, "wallpaper", current_wallpaper_index_);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
 }
 #endif
 
@@ -1286,4 +1563,39 @@ void LcdDisplay::SetTheme(const std::string& theme_name) {
 
     // No errors occurred. Save theme to settings
     Display::SetTheme(theme_name);
+}
+
+// 将SetChatMessage函数移出条件编译块，使其在所有模式下都可用
+void LcdDisplay::SetChatMessage(const char* role, const char* content) {
+    DisplayLockGuard lock(this);
+    
+    // 如果是系统消息且内容只有空格，这是我们用来切换界面的特殊情况
+    bool is_switch_trigger = (strcmp(role, "system") == 0 && content && strlen(content) == 1 && content[0] == ' ');
+    
+    // 如果有消息内容或是切换触发器，隐藏欢迎界面，显示聊天界面
+    if ((content && strlen(content) > 0) || is_switch_trigger) {
+        if (welcome_container_ != nullptr) {
+            lv_obj_add_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (container_ != nullptr) {
+            lv_obj_clear_flag(container_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (content_ != nullptr) {
+            lv_obj_clear_flag(content_, LV_OBJ_FLAG_HIDDEN);
+        }
+        
+        // 如果只是切换触发器，不创建消息气泡
+        if (is_switch_trigger) {
+            return;
+        }
+    } else {
+        // 如果没有消息内容，显示欢迎界面，隐藏聊天界面
+        if (welcome_container_ != nullptr) {
+            lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (container_ != nullptr) {
+            lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN);
+        }
+        return; // 避免创建空消息框
+    }
 }
