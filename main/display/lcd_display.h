@@ -33,6 +33,9 @@ protected:
     lv_obj_t* colon_label_ = nullptr;
     lv_obj_t* minute_label_ = nullptr;
 
+    // 日期标签
+    lv_obj_t* date_label_ = nullptr;
+
     void SetupUI();
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
@@ -62,6 +65,15 @@ public:
 
     // 更换背景壁纸
     void ChangeWallpaper(const char* wallpaper_name);
+
+    // 创建欢迎界面容器及其组件
+    void SetupWelcomeScreen(lv_obj_t* screen);
+    
+    // 更新欢迎界面上的时间和日期
+    void UpdateWelcomeTimeAndDate();
+    
+    // 更新欢迎界面上的状态图标
+    void UpdateWelcomeStatusIcons();
 
 private:
     // 获取当前日期字符串（格式：日 周几）
