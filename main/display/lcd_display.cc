@@ -1,5 +1,5 @@
 #include "lcd_display.h"
-#include "bizhi.h"  // 添加背景图片头文件
+#include "assets/wallpapers/common/wallpapers.h"  // 替换为新的壁纸路径
 
 #include <vector>
 #include <font_awesome_symbols.h>
@@ -20,22 +20,24 @@ LV_FONT_DECLARE(font_time);
 // 在文件顶部添加字体声明
 LV_FONT_DECLARE(font_dingding);
 
-// 在文件顶部添加壁纸声明
-LV_IMG_DECLARE(bizhi);  // 默认壁纸
-LV_IMG_DECLARE(wallpaper1);
-LV_IMG_DECLARE(wallpaper2);
-LV_IMG_DECLARE(wallpaper3);
-
-// 在文件中添加壁纸资源数组
+// 根据不同分辨率选择不同的壁纸数组
+#if DISPLAY_WIDTH == 320 && DISPLAY_HEIGHT == 240
+// 320x240分辨率的壁纸数组
 static const lv_img_dsc_t* wallpapers[] = {
-    &bizhi,
+    &wallpaper0_320x240,
+    &wallpaper1_320x240,
+    &wallpaper2_320x240,
+    &wallpaper3_320x240,
+};
+#else
+// 默认使用240x240分辨率的壁纸
+static const lv_img_dsc_t* wallpapers[] = {
+    &wallpaper0,
     &wallpaper1,
     &wallpaper2,
     &wallpaper3,
 };
-
-// 壁纸数量
-static const int WALLPAPER_COUNT = sizeof(wallpapers) / sizeof(wallpapers[0]);
+#endif
 
 #define TAG "LcdDisplay"
 
@@ -539,7 +541,7 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_color(welcome_mute_label, lv_color_white(), 0);
     lv_label_set_text(welcome_mute_label, "");
     lv_obj_align(welcome_mute_label, LV_ALIGN_TOP_RIGHT, -70, 5);
-    
+
     // 保存这些标签的引用，以便稍后更新
     welcome_battery_label_ = welcome_battery_label;
     welcome_network_label_ = welcome_network_label;
@@ -1031,10 +1033,14 @@ void LcdDisplay::SetupUI() {
     }
 
     // 设置壁纸
-    if (current_wallpaper_index_ >= WALLPAPER_COUNT) {
+    const lv_img_dsc_t** wallpapers_array = GetWallpapersForResolution(width_, height_);
+    // 固定壁纸数量为4
+    int wallpaper_count = 4;
+    
+    if (current_wallpaper_index_ >= wallpaper_count) {
         current_wallpaper_index_ = 0;
     }
-    lv_img_set_src(bg_img_, wallpapers[current_wallpaper_index_]);
+    lv_img_set_src(bg_img_, wallpapers_array[current_wallpaper_index_]);
     lv_obj_set_size(bg_img_, LV_PCT(100), LV_PCT(100));
     lv_obj_center(bg_img_);
     lv_obj_set_style_img_recolor_opa(bg_img_, 50, 0);
@@ -1332,16 +1338,26 @@ void LcdDisplay::ChangeWallpaper(const char* direction) {
         return;
     }
 
+    // 获取当前分辨率
+    int width = width_;
+    int height = height_;
+    
+    // 获取当前分辨率对应的壁纸数组
+    const lv_img_dsc_t** wallpapers_array = GetWallpapersForResolution(width, height);
+    
+    // 计算壁纸数量
+    int wallpaper_count = 4; // 假设总是有4个壁纸
+    
     if (strcmp(direction, "next") == 0) {
-        current_wallpaper_index_ = (current_wallpaper_index_ + 1) % WALLPAPER_COUNT;
+        current_wallpaper_index_ = (current_wallpaper_index_ + 1) % wallpaper_count;
     } else if (strcmp(direction, "previous") == 0) {
-        current_wallpaper_index_ = (current_wallpaper_index_ - 1 + WALLPAPER_COUNT) % WALLPAPER_COUNT;
+        current_wallpaper_index_ = (current_wallpaper_index_ - 1 + wallpaper_count) % wallpaper_count;
     }
 
-    ESP_LOGI(TAG, "Changing wallpaper to index %d", current_wallpaper_index_);
+    ESP_LOGI(TAG, "Changing wallpaper to index %d for resolution %dx%d", current_wallpaper_index_, width, height);
     
     // 设置新壁纸
-    lv_img_set_src(bg_img_, wallpapers[current_wallpaper_index_]);
+    lv_img_set_src(bg_img_, wallpapers_array[current_wallpaper_index_]);
 
     // 保存当前壁纸设置到NVS
     nvs_handle_t handle;
