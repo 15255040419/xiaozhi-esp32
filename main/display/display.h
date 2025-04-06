@@ -33,6 +33,9 @@ public:
 
     // 添加显示时间和日期的虚拟方法（默认为空实现）
     virtual void ShowTimeAndDate() {}
+    
+    // 添加更换壁纸的虚拟方法（默认为空实现）
+    virtual void ChangeWallpaper(const char* direction) {}
 
 protected:
     int width_ = 0;

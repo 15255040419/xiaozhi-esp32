@@ -61,7 +61,7 @@ public:
     void UpdateNetworkIcon(const char* icon);
 
     // 更换背景壁纸
-    void ChangeWallpaper(const char* wallpaper_name);
+    void ChangeWallpaper(const char* direction) override;
 
 private:
     // 获取当前日期字符串（格式：日 周几）
