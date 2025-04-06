@@ -1160,6 +1160,46 @@ void LcdDisplay::SetupUI() {
     // 强制立即更新一次时间显示，确保初始显示正确
     ShowTimeAndDate();
 }
+
+void LcdDisplay::SetChatMessage(const char* role, const char* content) {
+    DisplayLockGuard lock(this);
+    
+    // 如果是系统消息且内容只有空格，这是我们用来切换界面的特殊情况
+    bool is_switch_trigger = (strcmp(role, "system") == 0 && content && strlen(content) == 1 && content[0] == ' ');
+    
+    // 如果有消息内容或是切换触发器，隐藏欢迎界面，显示聊天界面
+    if ((content && strlen(content) > 0) || is_switch_trigger) {
+        if (welcome_container_ != nullptr) {
+            lv_obj_add_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (container_ != nullptr) {
+            lv_obj_clear_flag(container_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (content_ != nullptr) {
+            lv_obj_clear_flag(content_, LV_OBJ_FLAG_HIDDEN);
+        }
+        
+        // 如果只是切换触发器，不创建消息气泡
+        if (is_switch_trigger) {
+            return;
+        }
+    } else {
+        // 如果没有消息内容，显示欢迎界面，隐藏聊天界面
+        if (welcome_container_ != nullptr) {
+            lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (container_ != nullptr) {
+            lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN);
+        }
+        return; // 避免创建空消息框
+    }
+
+    // 普通模式下的消息显示
+    if (chat_message_label_ != nullptr) {
+        lv_label_set_text(chat_message_label_, content);
+    }
+}
+
 void LcdDisplay::ShowTimeAndDate() {
     DisplayLockGuard lock(this);
     
@@ -1563,50 +1603,4 @@ void LcdDisplay::SetTheme(const std::string& theme_name) {
 
     // No errors occurred. Save theme to settings
     Display::SetTheme(theme_name);
-}
-
-// 将SetChatMessage函数移出条件编译块，使其在所有模式下都可用
-void LcdDisplay::SetChatMessage(const char* role, const char* content) {
-    DisplayLockGuard lock(this);
-    
-    // 如果是系统消息且内容只有空格，这是我们用来切换界面的特殊情况
-    bool is_switch_trigger = (strcmp(role, "system") == 0 && content && strlen(content) == 1 && content[0] == ' ');
-    
-    // 如果有消息内容或是切换触发器，隐藏欢迎界面，显示聊天界面
-    if ((content && strlen(content) > 0) || is_switch_trigger) {
-        if (welcome_container_ != nullptr) {
-            lv_obj_add_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
-        }
-        if (container_ != nullptr) {
-            lv_obj_clear_flag(container_, LV_OBJ_FLAG_HIDDEN);
-        }
-        if (content_ != nullptr) {
-            lv_obj_clear_flag(content_, LV_OBJ_FLAG_HIDDEN);
-        }
-        
-        // 如果只是切换触发器，不创建消息气泡
-        if (is_switch_trigger) {
-            return;
-        }
-    } else {
-        // 如果没有消息内容，显示欢迎界面，隐藏聊天界面
-        if (welcome_container_ != nullptr) {
-            lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
-        }
-        if (container_ != nullptr) {
-            lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN);
-        }
-        return; // 避免创建空消息框
-    }
-
-#if CONFIG_USE_WECHAT_MESSAGE_STYLE
-    // 微信模式下的消息气泡创建代码
-    // 这里应该是原有的微信模式代码
-    // ...
-#else
-    // 普通模式下的消息显示
-    if (chat_message_label_ != nullptr) {
-        lv_label_set_text(chat_message_label_, content);
-    }
-#endif
 }
