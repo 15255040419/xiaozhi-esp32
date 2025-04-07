@@ -880,16 +880,41 @@ void LcdDisplay::UpdateBatteryIcon(const char* icon) {
 void LcdDisplay::AdjustIconPositions() {
     DisplayLockGuard lock(this);
     
-    // 检查电池图标是否为空或为空字符串
-    bool has_battery = false;
-    if (welcome_battery_label_ != nullptr) {
-        const char* battery_text = lv_label_get_text(welcome_battery_label_);
-        has_battery = (battery_text != nullptr && strlen(battery_text) > 0);
-    }
+    // 通过编译配置判断是否支持电池
+    bool supports_battery = false;
     
-    // 根据电池图标是否存在调整其他图标的位置
-    if (has_battery) {
-        // 如果有电池图标，使用默认位置
+    // 检查已知支持电池的板子
+#if defined(CONFIG_BOARD_TYPE_RAN_LCD_WIFI) || \
+    defined(CONFIG_BOARD_TYPE_RAN_LCD_4G) || \
+    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_85TFT_WIFI) || \
+    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_85TFT_ML307) || \
+    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_96OLED_WIFI) || \
+    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_96OLED_ML307) || \
+    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_1_54TFT_WIFI) || \
+    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_1_54TFT_ML307) || \
+    defined(CONFIG_BOARD_TYPE_TUDOUZI) || \
+    defined(CONFIG_BOARD_TYPE_MAGICLICK_2P4) || \
+    defined(CONFIG_BOARD_TYPE_MAGICLICK_2P5) || \
+    defined(CONFIG_BOARD_TYPE_M5STACK_CORE_S3) || \
+    defined(CONFIG_BOARD_TYPE_KEVIN_BOX_2) || \
+    defined(CONFIG_BOARD_TYPE_ESP32S3_Touch_LCD_3_5) || \
+    defined(CONFIG_BOARD_TYPE_ESP32S3_Touch_AMOLED_1_8) || \
+    defined(CONFIG_BOARD_TYPE_DU_CHATX)
+    supports_battery = true;
+#else
+    // 或者尝试动态检测，如果 GetBatteryLevel 实现了
+    int level;
+    bool charging, discharging;
+    supports_battery = Board::GetInstance().GetBatteryLevel(level, charging, discharging);
+#endif
+    
+    // 根据是否支持电池调整图标位置
+    if (supports_battery) {
+        // 如果支持电池功能，设置图标位置
+        if (welcome_battery_label_ != nullptr) {
+            lv_obj_clear_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_align(welcome_battery_label_, LV_ALIGN_TOP_RIGHT, -10, 5);
+        }
         if (welcome_network_label_ != nullptr) {
             lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -40, 5);
         }
@@ -897,7 +922,10 @@ void LcdDisplay::AdjustIconPositions() {
             lv_obj_align(welcome_mute_label_, LV_ALIGN_TOP_RIGHT, -70, 5);
         }
     } else {
-        // 如果没有电池图标，将WiFi和静音图标向右移动
+        // 如果不支持电池功能，隐藏电池图标，调整其他位置
+        if (welcome_battery_label_ != nullptr) {
+            lv_obj_add_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
+        }
         if (welcome_network_label_ != nullptr) {
             lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -10, 5);
         }
@@ -1376,16 +1404,41 @@ void LcdDisplay::UpdateBatteryIcon(const char* icon) {
 void LcdDisplay::AdjustIconPositions() {
     DisplayLockGuard lock(this);
     
-    // 检查电池图标是否为空或为空字符串
-    bool has_battery = false;
-    if (welcome_battery_label_ != nullptr) {
-        const char* battery_text = lv_label_get_text(welcome_battery_label_);
-        has_battery = (battery_text != nullptr && strlen(battery_text) > 0);
-    }
+    // 通过编译配置判断是否支持电池
+    bool supports_battery = false;
     
-    // 根据电池图标是否存在调整其他图标的位置
-    if (has_battery) {
-        // 如果有电池图标，使用默认位置
+    // 检查已知支持电池的板子
+#if defined(CONFIG_BOARD_TYPE_RAN_LCD_WIFI) || \
+    defined(CONFIG_BOARD_TYPE_RAN_LCD_4G) || \
+    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_85TFT_WIFI) || \
+    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_85TFT_ML307) || \
+    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_96OLED_WIFI) || \
+    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_96OLED_ML307) || \
+    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_1_54TFT_WIFI) || \
+    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_1_54TFT_ML307) || \
+    defined(CONFIG_BOARD_TYPE_TUDOUZI) || \
+    defined(CONFIG_BOARD_TYPE_MAGICLICK_2P4) || \
+    defined(CONFIG_BOARD_TYPE_MAGICLICK_2P5) || \
+    defined(CONFIG_BOARD_TYPE_M5STACK_CORE_S3) || \
+    defined(CONFIG_BOARD_TYPE_KEVIN_BOX_2) || \
+    defined(CONFIG_BOARD_TYPE_ESP32S3_Touch_LCD_3_5) || \
+    defined(CONFIG_BOARD_TYPE_ESP32S3_Touch_AMOLED_1_8) || \
+    defined(CONFIG_BOARD_TYPE_DU_CHATX)
+    supports_battery = true;
+#else
+    // 或者尝试动态检测，如果 GetBatteryLevel 实现了
+    int level;
+    bool charging, discharging;
+    supports_battery = Board::GetInstance().GetBatteryLevel(level, charging, discharging);
+#endif
+    
+    // 根据是否支持电池调整图标位置
+    if (supports_battery) {
+        // 如果支持电池功能，设置图标位置
+        if (welcome_battery_label_ != nullptr) {
+            lv_obj_clear_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_align(welcome_battery_label_, LV_ALIGN_TOP_RIGHT, -10, 5);
+        }
         if (welcome_network_label_ != nullptr) {
             lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -40, 5);
         }
@@ -1393,7 +1446,10 @@ void LcdDisplay::AdjustIconPositions() {
             lv_obj_align(welcome_mute_label_, LV_ALIGN_TOP_RIGHT, -70, 5);
         }
     } else {
-        // 如果没有电池图标，将WiFi和静音图标向右移动
+        // 如果不支持电池功能，隐藏电池图标，调整其他位置
+        if (welcome_battery_label_ != nullptr) {
+            lv_obj_add_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
+        }
         if (welcome_network_label_ != nullptr) {
             lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -10, 5);
         }
