@@ -11,7 +11,10 @@ class Wallpaper : public Thing {
 public:
     Wallpaper() : Thing("Wallpaper", "控制壁纸切换的设备") {
         // 定义方法：NextWallpaper（切换到下一个壁纸）
-        methods_.AddMethod("NextWallpaper", "切换到下一个壁纸", ParameterList(), [this](const ParameterList& parameters) {
+        methods_.AddMethod("NextWallpaper", "切换到下一个壁纸", ParameterList({
+            // 添加一个参数，使其与音量、主题等设置类似
+            Parameter("sequence_id", "序列ID，每次调用使用不同值", kValueTypeNumber, true)
+        }), [this](const ParameterList& parameters) {
             auto display = Board::GetInstance().GetDisplay();
             if (display) {
                 display->ChangeWallpaper("next");
@@ -20,7 +23,10 @@ public:
         });
 
         // 定义方法：PreviousWallpaper（切换到上一个壁纸）
-        methods_.AddMethod("PreviousWallpaper", "切换到上一个壁纸", ParameterList(), [this](const ParameterList& parameters) {
+        methods_.AddMethod("PreviousWallpaper", "切换到上一个壁纸", ParameterList({
+            // 添加一个参数，使其与音量、主题等设置类似
+            Parameter("sequence_id", "序列ID，每次调用使用不同值", kValueTypeNumber, true)
+        }), [this](const ParameterList& parameters) {
             auto display = Board::GetInstance().GetDisplay();
             if (display) {
                 display->ChangeWallpaper("previous");

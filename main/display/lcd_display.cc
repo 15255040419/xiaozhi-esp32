@@ -437,15 +437,19 @@ void LcdDisplay::SetupUI() {
     }
 
     // 设置壁纸
-    if (current_wallpaper_index_ >= WALLPAPER_COUNT) {
+    const lv_img_dsc_t** wallpapers_array = GetWallpapersForResolution(width_, height_);
+    // 固定壁纸数量为4
+    int wallpaper_count = 4;
+    
+    if (current_wallpaper_index_ >= wallpaper_count) {
         current_wallpaper_index_ = 0;
     }
-    lv_img_set_src(bg_img_, wallpapers[current_wallpaper_index_]);
+    lv_img_set_src(bg_img_, wallpapers_array[current_wallpaper_index_]);
     lv_obj_set_size(bg_img_, LV_PCT(100), LV_PCT(100));
     lv_obj_center(bg_img_);
     lv_obj_set_style_img_recolor_opa(bg_img_, 50, 0);
     lv_obj_set_style_img_recolor(bg_img_, lv_color_black(), 0);
-    
+	    
     // 获取当前时间和日期
     time_t now = time(nullptr);
     struct tm* timeinfo = localtime(&now);
@@ -881,6 +885,7 @@ void LcdDisplay::UpdateNetworkIcon(const char* icon) {
     }
 }
 
+
 void LcdDisplay::ChangeWallpaper(const char* direction) {
     DisplayLockGuard lock(this);
 
@@ -889,16 +894,26 @@ void LcdDisplay::ChangeWallpaper(const char* direction) {
         return;
     }
 
+    // 获取当前分辨率
+    int width = width_;
+    int height = height_;
+    
+    // 获取当前分辨率对应的壁纸数组
+    const lv_img_dsc_t** wallpapers_array = GetWallpapersForResolution(width, height);
+    
+    // 计算壁纸数量
+    int wallpaper_count = 4; // 假设总是有4个壁纸
+    
     if (strcmp(direction, "next") == 0) {
-        current_wallpaper_index_ = (current_wallpaper_index_ + 1) % WALLPAPER_COUNT;
+        current_wallpaper_index_ = (current_wallpaper_index_ + 1) % wallpaper_count;
     } else if (strcmp(direction, "previous") == 0) {
-        current_wallpaper_index_ = (current_wallpaper_index_ - 1 + WALLPAPER_COUNT) % WALLPAPER_COUNT;
+        current_wallpaper_index_ = (current_wallpaper_index_ - 1 + wallpaper_count) % wallpaper_count;
     }
 
-    ESP_LOGI(TAG, "Changing wallpaper to index %d", current_wallpaper_index_);
+    ESP_LOGI(TAG, "Changing wallpaper to index %d for resolution %dx%d", current_wallpaper_index_, width, height);
     
     // 设置新壁纸
-    lv_img_set_src(bg_img_, wallpapers[current_wallpaper_index_]);
+    lv_img_set_src(bg_img_, wallpapers_array[current_wallpaper_index_]);
 
     // 保存当前壁纸设置到NVS
     nvs_handle_t handle;
