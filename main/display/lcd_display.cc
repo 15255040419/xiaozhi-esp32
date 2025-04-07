@@ -551,6 +551,9 @@ void LcdDisplay::SetupUI() {
     welcome_network_label_ = welcome_network_label;
     welcome_mute_label_ = welcome_mute_label;
     
+    // 调整图标位置
+    AdjustIconPositions();
+    
     // 初始时显示欢迎界面，隐藏聊天界面和状态栏
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN); // 隐藏整个container_，包括状态栏和聊天区域
@@ -869,6 +872,39 @@ void LcdDisplay::UpdateBatteryIcon(const char* icon) {
     if (welcome_battery_label_ != nullptr) {
         lv_label_set_text(welcome_battery_label_, icon);
     }
+
+    // 调整图标位置
+    AdjustIconPositions();
+}
+
+void LcdDisplay::AdjustIconPositions() {
+    DisplayLockGuard lock(this);
+    
+    // 检查电池图标是否为空或为空字符串
+    bool has_battery = false;
+    if (welcome_battery_label_ != nullptr) {
+        const char* battery_text = lv_label_get_text(welcome_battery_label_);
+        has_battery = (battery_text != nullptr && strlen(battery_text) > 0);
+    }
+    
+    // 根据电池图标是否存在调整其他图标的位置
+    if (has_battery) {
+        // 如果有电池图标，使用默认位置
+        if (welcome_network_label_ != nullptr) {
+            lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -40, 5);
+        }
+        if (welcome_mute_label_ != nullptr) {
+            lv_obj_align(welcome_mute_label_, LV_ALIGN_TOP_RIGHT, -70, 5);
+        }
+    } else {
+        // 如果没有电池图标，将WiFi和静音图标向右移动
+        if (welcome_network_label_ != nullptr) {
+            lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -10, 5);
+        }
+        if (welcome_mute_label_ != nullptr) {
+            lv_obj_align(welcome_mute_label_, LV_ALIGN_TOP_RIGHT, -40, 5);
+        }
+    }
 }
 
 void LcdDisplay::UpdateNetworkIcon(const char* icon) {
@@ -1162,6 +1198,9 @@ void LcdDisplay::SetupUI() {
     welcome_network_label_ = welcome_network_label;
     welcome_mute_label_ = welcome_mute_label;
     
+    // 调整图标位置
+    AdjustIconPositions();
+    
     // 初始时显示欢迎界面，隐藏聊天界面和状态栏
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN); // 隐藏整个container_，包括状态栏和聊天区域
@@ -1328,6 +1367,39 @@ void LcdDisplay::UpdateBatteryIcon(const char* icon) {
     // 同时更新欢迎界面中的电池图标
     if (welcome_battery_label_ != nullptr) {
         lv_label_set_text(welcome_battery_label_, icon);
+    }
+
+    // 调整图标位置
+    AdjustIconPositions();
+}
+
+void LcdDisplay::AdjustIconPositions() {
+    DisplayLockGuard lock(this);
+    
+    // 检查电池图标是否为空或为空字符串
+    bool has_battery = false;
+    if (welcome_battery_label_ != nullptr) {
+        const char* battery_text = lv_label_get_text(welcome_battery_label_);
+        has_battery = (battery_text != nullptr && strlen(battery_text) > 0);
+    }
+    
+    // 根据电池图标是否存在调整其他图标的位置
+    if (has_battery) {
+        // 如果有电池图标，使用默认位置
+        if (welcome_network_label_ != nullptr) {
+            lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -40, 5);
+        }
+        if (welcome_mute_label_ != nullptr) {
+            lv_obj_align(welcome_mute_label_, LV_ALIGN_TOP_RIGHT, -70, 5);
+        }
+    } else {
+        // 如果没有电池图标，将WiFi和静音图标向右移动
+        if (welcome_network_label_ != nullptr) {
+            lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -10, 5);
+        }
+        if (welcome_mute_label_ != nullptr) {
+            lv_obj_align(welcome_mute_label_, LV_ALIGN_TOP_RIGHT, -40, 5);
+        }
     }
 }
 
