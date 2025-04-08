@@ -883,29 +883,12 @@ void LcdDisplay::AdjustIconPositions() {
     // 通过编译配置判断是否支持电池
     bool supports_battery = false;
     
-    // 检查已知支持电池的板子
-#if defined(CONFIG_BOARD_TYPE_RAN_LCD_WIFI) || \
-    defined(CONFIG_BOARD_TYPE_RAN_LCD_4G) || \
-    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_85TFT_WIFI) || \
-    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_85TFT_ML307) || \
-    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_96OLED_WIFI) || \
-    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_96OLED_ML307) || \
-    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_1_54TFT_WIFI) || \
-    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_1_54TFT_ML307) || \
-    defined(CONFIG_BOARD_TYPE_TUDOUZI) || \
-    defined(CONFIG_BOARD_TYPE_MAGICLICK_2P4) || \
-    defined(CONFIG_BOARD_TYPE_MAGICLICK_2P5) || \
-    defined(CONFIG_BOARD_TYPE_M5STACK_CORE_S3) || \
-    defined(CONFIG_BOARD_TYPE_KEVIN_BOX_2) || \
-    defined(CONFIG_BOARD_TYPE_ESP32S3_Touch_LCD_3_5) || \
-    defined(CONFIG_BOARD_TYPE_ESP32S3_Touch_AMOLED_1_8) || \
-    defined(CONFIG_BOARD_TYPE_DU_CHATX)
+    // 只检查 ran-lcd-wifi 机型
+#if defined(CONFIG_BOARD_TYPE_RAN_LCD_WIFI)
     supports_battery = true;
 #else
-    // 或者尝试动态检测，如果 GetBatteryLevel 实现了
-    int level;
-    bool charging, discharging;
-    supports_battery = Board::GetInstance().GetBatteryLevel(level, charging, discharging);
+    // 其他机型（包括 lichuang-dev）不支持电池
+    supports_battery = false;
 #endif
     
     // 根据是否支持电池调整图标位置
@@ -1407,29 +1390,12 @@ void LcdDisplay::AdjustIconPositions() {
     // 通过编译配置判断是否支持电池
     bool supports_battery = false;
     
-    // 检查已知支持电池的板子
-#if defined(CONFIG_BOARD_TYPE_RAN_LCD_WIFI) || \
-    defined(CONFIG_BOARD_TYPE_RAN_LCD_4G) || \
-    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_85TFT_WIFI) || \
-    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_85TFT_ML307) || \
-    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_96OLED_WIFI) || \
-    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_0_96OLED_ML307) || \
-    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_1_54TFT_WIFI) || \
-    defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_1_54TFT_ML307) || \
-    defined(CONFIG_BOARD_TYPE_TUDOUZI) || \
-    defined(CONFIG_BOARD_TYPE_MAGICLICK_2P4) || \
-    defined(CONFIG_BOARD_TYPE_MAGICLICK_2P5) || \
-    defined(CONFIG_BOARD_TYPE_M5STACK_CORE_S3) || \
-    defined(CONFIG_BOARD_TYPE_KEVIN_BOX_2) || \
-    defined(CONFIG_BOARD_TYPE_ESP32S3_Touch_LCD_3_5) || \
-    defined(CONFIG_BOARD_TYPE_ESP32S3_Touch_AMOLED_1_8) || \
-    defined(CONFIG_BOARD_TYPE_DU_CHATX)
+    // 只检查 ran-lcd-wifi 机型
+#if defined(CONFIG_BOARD_TYPE_RAN_LCD_WIFI)
     supports_battery = true;
 #else
-    // 或者尝试动态检测，如果 GetBatteryLevel 实现了
-    int level;
-    bool charging, discharging;
-    supports_battery = Board::GetInstance().GetBatteryLevel(level, charging, discharging);
+    // 其他机型（包括 lichuang-dev）不支持电池
+    supports_battery = false;
 #endif
     
     // 根据是否支持电池调整图标位置
