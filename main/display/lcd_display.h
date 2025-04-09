@@ -20,6 +20,9 @@ protected:
     lv_obj_t* container_ = nullptr;
     lv_obj_t* side_bar_ = nullptr;
     lv_obj_t* welcome_container_ = nullptr;
+    lv_obj_t* bg_img_ = nullptr;  // 壁纸图片对象
+    
+    uint8_t current_wallpaper_index_ = 0;  // 当前壁纸索引
 
     DisplayFonts fonts_;
 
@@ -34,12 +37,11 @@ protected:
     lv_obj_t* minute_label_ = nullptr;
 
     void SetupUI();
+    void SetupWelcomeUI(lv_obj_t* screen);
+    void AdjustIconPositions();
+    
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
-
-    // 调整图标位置的方法
-    void AdjustIconPositions();
-
 protected:
     // 添加protected构造函数
     LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel, DisplayFonts fonts)
@@ -71,11 +73,6 @@ private:
     std::string GetDateString();
     // 获取当前时间字符串
     std::string GetTimeString();
-
-    // 当前壁纸索引
-    int current_wallpaper_index_ = 0;
-    // 壁纸图像对象
-    lv_obj_t* bg_img_ = nullptr;
 };
 
 // RGB LCD显示器

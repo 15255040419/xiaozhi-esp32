@@ -20,25 +20,6 @@ LV_FONT_DECLARE(font_time);
 // 在文件顶部添加字体声明
 LV_FONT_DECLARE(font_dingding);
 
-// 根据不同分辨率选择不同的壁纸数组
-#if DISPLAY_WIDTH == 320 && DISPLAY_HEIGHT == 240
-// 320x240分辨率的壁纸数组
-static const lv_img_dsc_t* wallpapers[] = {
-    &wallpaper0_320x240,
-    &wallpaper1_320x240,
-    &wallpaper2_320x240,
-    &wallpaper3_320x240,
-};
-#else
-// 默认使用240x240分辨率的壁纸
-static const lv_img_dsc_t* wallpapers[] = {
-    &wallpaper0,
-    &wallpaper1,
-    &wallpaper2,
-    &wallpaper3,
-};
-#endif
-
 #define TAG "LcdDisplay"
 
 // Color definitions for dark theme
@@ -300,118 +281,8 @@ void LcdDisplay::Unlock() {
     lvgl_port_unlock();
 }
 
-#if CONFIG_USE_WECHAT_MESSAGE_STYLE
-void LcdDisplay::SetupUI() {
-    DisplayLockGuard lock(this);
-
-    auto screen = lv_screen_active();
-    lv_obj_set_style_text_font(screen, fonts_.text_font, 0);
-    lv_obj_set_style_text_color(screen, current_theme.text, 0);
-    lv_obj_set_style_bg_color(screen, current_theme.background, 0);
-
-    /* Container */
-    container_ = lv_obj_create(screen);
-    lv_obj_set_size(container_, LV_HOR_RES, LV_VER_RES);
-    lv_obj_set_flex_flow(container_, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(container_, 0, 0);
-    lv_obj_set_style_border_width(container_, 0, 0);
-    lv_obj_set_style_pad_row(container_, 0, 0);
-    lv_obj_set_style_bg_color(container_, current_theme.background, 0);
-    lv_obj_set_style_border_color(container_, current_theme.border, 0);
-
-    /* Status bar */
-    status_bar_ = lv_obj_create(container_);
-    lv_obj_set_size(status_bar_, LV_HOR_RES, LV_SIZE_CONTENT);
-    lv_obj_set_style_radius(status_bar_, 0, 0);
-    lv_obj_set_style_bg_color(status_bar_, current_theme.background, 0);
-    lv_obj_set_style_text_color(status_bar_, current_theme.text, 0);
-    
-    /* Content - Chat area */
-    content_ = lv_obj_create(container_);
-    lv_obj_set_style_radius(content_, 0, 0);
-    lv_obj_set_width(content_, LV_HOR_RES);
-    lv_obj_set_flex_grow(content_, 1);
-    lv_obj_set_style_pad_all(content_, 10, 0);
-    lv_obj_set_style_bg_color(content_, current_theme.chat_background, 0); // Background for chat area
-    
-    // 使用方案2: 边框颜色与背景相同
-    lv_obj_set_style_border_color(content_, current_theme.chat_background, 0);
-    
-    // Enable scrolling for chat content
-    lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_scroll_dir(content_, LV_DIR_VER);
-    
-    // Create a flex container for chat messages
-    lv_obj_set_flex_flow(content_, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(content_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_row(content_, 10, 0); // Space between messages
-
-    // We'll create chat messages dynamically in SetChatMessage
-    chat_message_label_ = nullptr;
-
-    /* Status bar */
-    lv_obj_set_flex_flow(status_bar_, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_all(status_bar_, 0, 0);
-    lv_obj_set_style_border_width(status_bar_, 0, 0);
-    lv_obj_set_style_pad_column(status_bar_, 0, 0);
-    lv_obj_set_style_pad_left(status_bar_, 10, 0);
-    lv_obj_set_style_pad_right(status_bar_, 10, 0);
-    lv_obj_set_style_pad_top(status_bar_, 2, 0);
-    lv_obj_set_style_pad_bottom(status_bar_, 2, 0);
-    lv_obj_set_scrollbar_mode(status_bar_, LV_SCROLLBAR_MODE_OFF);
-    // 设置状态栏的内容垂直居中
-    lv_obj_set_flex_align(status_bar_, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    // 创建emotion_label_在状态栏最左侧
-    emotion_label_ = lv_label_create(status_bar_);
-    lv_obj_set_style_text_font(emotion_label_, &font_awesome_30_4, 0);
-    lv_obj_set_style_text_color(emotion_label_, current_theme.text, 0);
-    lv_label_set_text(emotion_label_, FONT_AWESOME_AI_CHIP);
-    lv_obj_set_style_margin_right(emotion_label_, 5, 0); // 添加右边距，与后面的元素分隔
-
-    notification_label_ = lv_label_create(status_bar_);
-    lv_obj_set_flex_grow(notification_label_, 1);
-    lv_obj_set_style_text_align(notification_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(notification_label_, current_theme.text, 0);
-    lv_label_set_text(notification_label_, "");
-    lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
-
-    status_label_ = lv_label_create(status_bar_);
-    lv_obj_set_flex_grow(status_label_, 1);
-    lv_label_set_long_mode(status_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(status_label_, current_theme.text, 0);
-    lv_label_set_text(status_label_, Lang::Strings::INITIALIZING);
-    
-    mute_label_ = lv_label_create(status_bar_);
-    lv_label_set_text(mute_label_, "");
-    lv_obj_set_style_text_font(mute_label_, fonts_.icon_font, 0);
-    lv_obj_set_style_text_color(mute_label_, current_theme.text, 0);
-
-    network_label_ = lv_label_create(status_bar_);
-    lv_label_set_text(network_label_, "");
-    lv_obj_set_style_text_font(network_label_, fonts_.icon_font, 0);
-    lv_obj_set_style_text_color(network_label_, current_theme.text, 0);
-    lv_obj_set_style_margin_left(network_label_, 5, 0); // 添加左边距，与前面的元素分隔
-
-    battery_label_ = lv_label_create(status_bar_);
-    lv_label_set_text(battery_label_, "");
-    lv_obj_set_style_text_font(battery_label_, fonts_.icon_font, 0);
-    lv_obj_set_style_text_color(battery_label_, current_theme.text, 0);
-    lv_obj_set_style_margin_left(battery_label_, 5, 0); // 添加左边距，与前面的元素分隔
-
-    low_battery_popup_ = lv_obj_create(screen);
-    lv_obj_set_scrollbar_mode(low_battery_popup_, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_size(low_battery_popup_, LV_HOR_RES * 0.9, fonts_.text_font->line_height * 2);
-    lv_obj_align(low_battery_popup_, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_bg_color(low_battery_popup_, current_theme.low_battery, 0);
-    lv_obj_set_style_radius(low_battery_popup_, 10, 0);
-    lv_obj_t* low_battery_label = lv_label_create(low_battery_popup_);
-    lv_label_set_text(low_battery_label, Lang::Strings::BATTERY_NEED_CHARGE);
-    lv_obj_set_style_text_color(low_battery_label, lv_color_white(), 0);
-    lv_obj_center(low_battery_label);
-    lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
-
+// 设置欢迎界面UI
+void LcdDisplay::SetupWelcomeUI(lv_obj_t* screen) {
     // 创建欢迎容器 - 直接放在屏幕上，而不是container_中
     welcome_container_ = lv_obj_create(screen);
     lv_obj_set_style_radius(welcome_container_, 0, 0);
@@ -554,9 +425,8 @@ void LcdDisplay::SetupUI() {
     // 调整图标位置
     AdjustIconPositions();
     
-    // 初始时显示欢迎界面，隐藏聊天界面和状态栏
+    // 显示欢迎界面
     lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN); // 隐藏整个container_，包括状态栏和聊天区域
     
     // 初始化冒号闪烁定时器
     esp_timer_handle_t colon_timer;
@@ -572,6 +442,330 @@ void LcdDisplay::SetupUI() {
 
     // 强制立即更新一次时间显示，确保初始显示正确
     ShowTimeAndDate();
+}
+
+
+void LcdDisplay::ShowTimeAndDate() {
+    DisplayLockGuard lock(this);
+    
+    if (welcome_container_ == nullptr) {
+        return;
+    }
+    
+    // 获取当前时间和日期
+    time_t now = time(nullptr);
+    struct tm* timeinfo = localtime(&now);
+    
+    // 格式化小时和分钟
+    char hour_str[3];
+    char min_str[3];
+    snprintf(hour_str, sizeof(hour_str), "%02d", timeinfo->tm_hour);
+    snprintf(min_str, sizeof(min_str), "%02d", timeinfo->tm_min);
+    
+    // 更新小时和分钟标签
+    if (hour_label_ != nullptr) {
+        lv_label_set_text(hour_label_, hour_str);
+    }
+    
+    if (minute_label_ != nullptr) {
+        lv_label_set_text(minute_label_, min_str);
+    }
+    
+    // 控制冒号的可见性
+    if (colon_label_ != nullptr) {
+        if (colon_visible) {
+            // 显示冒号
+            lv_obj_clear_flag(colon_label_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            // 隐藏冒号
+            lv_obj_add_flag(colon_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    
+    // 获取日期和星期
+    int day = timeinfo->tm_mday;
+    const char* weekdays[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+    const char* weekday = weekdays[timeinfo->tm_wday];
+    
+    // 格式化日期为 "23 周日" 格式
+    char date_str[20];
+    snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
+    
+    // 查找日期标签
+    lv_obj_t* date_label = NULL;
+    
+    // 遍历welcome_container_的子对象，找到日期标签
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(welcome_container_); i++) {
+        lv_obj_t* child = lv_obj_get_child(welcome_container_, i);
+        if (child != NULL && child != hour_label_ && child != colon_label_ && child != minute_label_ &&
+            child != welcome_battery_label_ && child != welcome_network_label_) {
+            // 假设第一个非时间标签、非图标的标签是日期标签
+            if (lv_obj_check_type(child, &lv_label_class)) {
+                date_label = child;
+                break;
+            }
+        }
+    }
+    
+    // 更新日期标签（只在日期变化时更新）
+    static int last_day = -1;
+    static int last_wday = -1;
+    
+    if (date_label != NULL && (day != last_day || timeinfo->tm_wday != last_wday || last_day == -1)) {
+        lv_label_set_text(date_label, date_str);
+        last_day = day;
+        last_wday = timeinfo->tm_wday;
+    }
+    
+    // 同步欢迎界面上的电池和网络图标
+    if (welcome_battery_label_ != nullptr && battery_label_ != nullptr) {
+        const char* battery_text = lv_label_get_text(battery_label_);
+        if (battery_text && strlen(battery_text) > 0) {
+            lv_label_set_text(welcome_battery_label_, battery_text);
+        }
+    }
+    
+    if (welcome_network_label_ != nullptr && network_label_ != nullptr) {
+        const char* network_text = lv_label_get_text(network_label_);
+        if (network_text && strlen(network_text) > 0) {
+            lv_label_set_text(welcome_network_label_, network_text);
+        }
+    }
+    
+    // 同步欢迎界面上的静音图标
+    if (welcome_mute_label_ != nullptr && mute_label_ != nullptr) {
+        const char* mute_text = lv_label_get_text(mute_label_);
+        if (mute_text) {
+            lv_label_set_text(welcome_mute_label_, mute_text);
+        }
+    }
+}
+
+void LcdDisplay::UpdateBatteryIcon(const char* icon) {
+    DisplayLockGuard lock(this);
+    
+    // 更新状态栏中的电池图标
+    if (battery_label_ != nullptr) {
+        lv_label_set_text(battery_label_, icon);
+    }
+    
+    // 同时更新欢迎界面中的电池图标
+    if (welcome_battery_label_ != nullptr) {
+        lv_label_set_text(welcome_battery_label_, icon);
+    }
+
+    // 调整图标位置
+    AdjustIconPositions();
+}
+
+void LcdDisplay::AdjustIconPositions() {
+    DisplayLockGuard lock(this);
+    
+    // 通过编译配置判断是否支持电池
+    bool supports_battery = false;
+    
+    // 只检查 ran-lcd-wifi 机型
+#if defined(CONFIG_BOARD_TYPE_RAN_LCD_WIFI)
+    supports_battery = true;
+#else
+    // 其他机型（包括 lichuang-dev）不支持电池
+    supports_battery = false;
+#endif
+    
+    // 根据是否支持电池调整图标位置
+    if (supports_battery) {
+        // 如果支持电池功能，设置图标位置
+        if (welcome_battery_label_ != nullptr) {
+            lv_obj_clear_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_align(welcome_battery_label_, LV_ALIGN_TOP_RIGHT, -10, 5);
+        }
+        if (welcome_network_label_ != nullptr) {
+            lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -40, 5);
+        }
+        if (welcome_mute_label_ != nullptr) {
+            lv_obj_align(welcome_mute_label_, LV_ALIGN_TOP_RIGHT, -70, 5);
+        }
+    } else {
+        // 如果不支持电池功能，隐藏电池图标，调整其他位置
+        if (welcome_battery_label_ != nullptr) {
+            lv_obj_add_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (welcome_network_label_ != nullptr) {
+            lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -10, 5);
+        }
+        if (welcome_mute_label_ != nullptr) {
+            lv_obj_align(welcome_mute_label_, LV_ALIGN_TOP_RIGHT, -40, 5);
+        }
+    }
+}
+
+void LcdDisplay::UpdateNetworkIcon(const char* icon) {
+    DisplayLockGuard lock(this);
+    
+    // 更新状态栏中的网络图标
+    if (network_label_ != nullptr) {
+        lv_label_set_text(network_label_, icon);
+    }
+    
+    // 同时更新欢迎界面中的网络图标
+    if (welcome_network_label_ != nullptr) {
+        lv_label_set_text(welcome_network_label_, icon);
+    }
+}
+
+void LcdDisplay::ChangeWallpaper(const char* direction) {
+    DisplayLockGuard lock(this);
+
+    if (bg_img_ == nullptr) {
+        ESP_LOGE(TAG, "Background image not initialized");
+        return;
+    }
+
+    // 获取当前分辨率
+    int width = width_;
+    int height = height_;
+    
+    // 获取当前分辨率对应的壁纸数组
+    const lv_img_dsc_t** wallpapers_array = GetWallpapersForResolution(width, height);
+    
+    // 计算壁纸数量
+    int wallpaper_count = 4; // 假设总是有4个壁纸
+    
+    if (strcmp(direction, "next") == 0) {
+        current_wallpaper_index_ = (current_wallpaper_index_ + 1) % wallpaper_count;
+    } else if (strcmp(direction, "previous") == 0) {
+        current_wallpaper_index_ = (current_wallpaper_index_ - 1 + wallpaper_count) % wallpaper_count;
+    }
+
+    ESP_LOGI(TAG, "Changing wallpaper to index %d for resolution %dx%d", current_wallpaper_index_, width, height);
+    
+    // 设置新壁纸
+    lv_img_set_src(bg_img_, wallpapers_array[current_wallpaper_index_]);
+
+    // 保存当前壁纸设置到NVS
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("storage", NVS_READWRITE, &handle);
+    if (err == ESP_OK) {
+        nvs_set_u8(handle, "wallpaper", current_wallpaper_index_);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+}
+
+// 微信风格界面的SetupUI
+#if CONFIG_USE_WECHAT_MESSAGE_STYLE
+void LcdDisplay::SetupUI() {
+    DisplayLockGuard lock(this);
+    auto screen = lv_screen_active();
+    
+    // 首先设置欢迎界面
+    SetupWelcomeUI(screen);
+    
+    // 然后设置微信风格的聊天界面
+    lv_obj_set_style_text_font(screen, fonts_.text_font, 0);
+    lv_obj_set_style_text_color(screen, current_theme.text, 0);
+    lv_obj_set_style_bg_color(screen, current_theme.background, 0);
+    
+    /* Container */
+    container_ = lv_obj_create(screen);
+    lv_obj_set_size(container_, LV_HOR_RES, LV_VER_RES);
+    lv_obj_set_flex_flow(container_, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(container_, 0, 0);
+    lv_obj_set_style_border_width(container_, 0, 0);
+    lv_obj_set_style_pad_row(container_, 0, 0);
+    lv_obj_set_style_bg_color(container_, current_theme.background, 0);
+    lv_obj_set_style_border_color(container_, current_theme.border, 0);
+
+    /* Status bar */
+    status_bar_ = lv_obj_create(container_);
+    lv_obj_set_size(status_bar_, LV_HOR_RES, LV_SIZE_CONTENT);
+    lv_obj_set_style_radius(status_bar_, 0, 0);
+    lv_obj_set_style_bg_color(status_bar_, current_theme.background, 0);
+    lv_obj_set_style_text_color(status_bar_, current_theme.text, 0);
+    
+    /* Content - Chat area */
+    content_ = lv_obj_create(container_);
+    lv_obj_set_style_radius(content_, 0, 0);
+    lv_obj_set_width(content_, LV_HOR_RES);
+    lv_obj_set_flex_grow(content_, 1);
+    lv_obj_set_style_pad_all(content_, 10, 0);
+    lv_obj_set_style_bg_color(content_, current_theme.chat_background, 0); // Background for chat area
+    lv_obj_set_style_border_color(content_, current_theme.chat_background, 0);
+    
+    // Enable scrolling for chat content
+    lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_scroll_dir(content_, LV_DIR_VER);
+    
+    // Create a flex container for chat messages
+    lv_obj_set_flex_flow(content_, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(content_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_row(content_, 10, 0); // Space between messages
+
+    // We'll create chat messages dynamically in SetChatMessage
+    chat_message_label_ = nullptr;
+
+    /* Status bar */
+    lv_obj_set_flex_flow(status_bar_, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_all(status_bar_, 0, 0);
+    lv_obj_set_style_border_width(status_bar_, 0, 0);
+    lv_obj_set_style_pad_column(status_bar_, 0, 0);
+    lv_obj_set_style_pad_left(status_bar_, 10, 0);
+    lv_obj_set_style_pad_right(status_bar_, 10, 0);
+    lv_obj_set_style_pad_top(status_bar_, 2, 0);
+    lv_obj_set_style_pad_bottom(status_bar_, 2, 0);
+    lv_obj_set_scrollbar_mode(status_bar_, LV_SCROLLBAR_MODE_OFF);
+    // 设置状态栏的内容垂直居中
+    lv_obj_set_flex_align(status_bar_, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    // 创建emotion_label_在状态栏最左侧
+    emotion_label_ = lv_label_create(status_bar_);
+    lv_obj_set_style_text_font(emotion_label_, &font_awesome_30_4, 0);
+    lv_obj_set_style_text_color(emotion_label_, current_theme.text, 0);
+    lv_label_set_text(emotion_label_, FONT_AWESOME_AI_CHIP);
+    lv_obj_set_style_margin_right(emotion_label_, 5, 0); // 添加右边距，与后面的元素分隔
+
+    notification_label_ = lv_label_create(status_bar_);
+    lv_obj_set_flex_grow(notification_label_, 1);
+    lv_obj_set_style_text_align(notification_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(notification_label_, current_theme.text, 0);
+    lv_label_set_text(notification_label_, "");
+    lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
+
+    status_label_ = lv_label_create(status_bar_);
+    lv_obj_set_flex_grow(status_label_, 1);
+    lv_label_set_long_mode(status_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(status_label_, current_theme.text, 0);
+    lv_label_set_text(status_label_, Lang::Strings::INITIALIZING);
+    
+    mute_label_ = lv_label_create(status_bar_);
+    lv_label_set_text(mute_label_, "");
+    lv_obj_set_style_text_font(mute_label_, fonts_.icon_font, 0);
+    lv_obj_set_style_text_color(mute_label_, current_theme.text, 0);
+
+    network_label_ = lv_label_create(status_bar_);
+    lv_label_set_text(network_label_, "");
+    lv_obj_set_style_text_font(network_label_, fonts_.icon_font, 0);
+    lv_obj_set_style_text_color(network_label_, current_theme.text, 0);
+    lv_obj_set_style_margin_left(network_label_, 5, 0); // 添加左边距，与前面的元素分隔
+
+    battery_label_ = lv_label_create(status_bar_);
+    lv_label_set_text(battery_label_, "");
+    lv_obj_set_style_text_font(battery_label_, fonts_.icon_font, 0);
+    lv_obj_set_style_text_color(battery_label_, current_theme.text, 0);
+    lv_obj_set_style_margin_left(battery_label_, 5, 0); // 添加左边距，与前面的元素分隔
+
+    low_battery_popup_ = lv_obj_create(screen);
+    lv_obj_set_scrollbar_mode(low_battery_popup_, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_size(low_battery_popup_, LV_HOR_RES * 0.9, fonts_.text_font->line_height * 2);
+    lv_obj_align(low_battery_popup_, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_style_bg_color(low_battery_popup_, current_theme.low_battery, 0);
+    lv_obj_set_style_radius(low_battery_popup_, 10, 0);
+    lv_obj_t* low_battery_label = lv_label_create(low_battery_popup_);
+    lv_label_set_text(low_battery_label, Lang::Strings::BATTERY_NEED_CHARGE);
+    lv_obj_set_style_text_color(low_battery_label, lv_color_white(), 0);
+    lv_obj_center(low_battery_label);
+    lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
 }
 
 #define  MAX_MESSAGES 20
@@ -763,219 +957,16 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
     // Store reference to the latest message label
     chat_message_label_ = msg_text;
 }
-
-void LcdDisplay::ShowTimeAndDate() {
-    DisplayLockGuard lock(this);
-    
-    if (welcome_container_ == nullptr) {
-        return;
-    }
-    
-    // 获取当前时间和日期
-    time_t now = time(nullptr);
-    struct tm* timeinfo = localtime(&now);
-    
-    // 格式化小时和分钟
-    char hour_str[3];
-    char min_str[3];
-    snprintf(hour_str, sizeof(hour_str), "%02d", timeinfo->tm_hour);
-    snprintf(min_str, sizeof(min_str), "%02d", timeinfo->tm_min);
-    
-    // 更新小时和分钟标签
-    if (hour_label_ != nullptr) {
-        lv_label_set_text(hour_label_, hour_str);
-    }
-    
-    if (minute_label_ != nullptr) {
-        lv_label_set_text(minute_label_, min_str);
-    }
-    
-    // 控制冒号的可见性
-    if (colon_label_ != nullptr) {
-        if (colon_visible) {
-            // 显示冒号
-            lv_obj_clear_flag(colon_label_, LV_OBJ_FLAG_HIDDEN);
-        } else {
-            // 隐藏冒号
-            lv_obj_add_flag(colon_label_, LV_OBJ_FLAG_HIDDEN);
-        }
-    }
-    
-    // 获取日期和星期
-    int day = timeinfo->tm_mday;
-    const char* weekdays[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
-    const char* weekday = weekdays[timeinfo->tm_wday];
-    
-    // 格式化日期为 "23 周日" 格式
-    char date_str[20];
-    snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
-    
-    // 查找日期标签
-    lv_obj_t* date_label = NULL;
-    
-    // 遍历welcome_container_的子对象，找到日期标签
-    for (uint32_t i = 0; i < lv_obj_get_child_cnt(welcome_container_); i++) {
-        lv_obj_t* child = lv_obj_get_child(welcome_container_, i);
-        if (child != NULL && child != hour_label_ && child != colon_label_ && child != minute_label_ &&
-            child != welcome_battery_label_ && child != welcome_network_label_) {
-            // 假设第一个非时间标签、非图标的标签是日期标签
-            if (lv_obj_check_type(child, &lv_label_class)) {
-                date_label = child;
-                break;
-            }
-        }
-    }
-    
-    // 更新日期标签（只在日期变化时更新）
-    static int last_day = -1;
-    static int last_wday = -1;
-    
-    if (date_label != NULL && (day != last_day || timeinfo->tm_wday != last_wday || last_day == -1)) {
-        lv_label_set_text(date_label, date_str);
-        last_day = day;
-        last_wday = timeinfo->tm_wday;
-    }
-    
-    // 同步欢迎界面上的电池和网络图标
-    if (welcome_battery_label_ != nullptr && battery_label_ != nullptr) {
-        const char* battery_text = lv_label_get_text(battery_label_);
-        if (battery_text && strlen(battery_text) > 0) {
-            lv_label_set_text(welcome_battery_label_, battery_text);
-        }
-    }
-    
-    if (welcome_network_label_ != nullptr && network_label_ != nullptr) {
-        const char* network_text = lv_label_get_text(network_label_);
-        if (network_text && strlen(network_text) > 0) {
-            lv_label_set_text(welcome_network_label_, network_text);
-        }
-    }
-    
-    // 同步欢迎界面上的静音图标
-    if (welcome_mute_label_ != nullptr && mute_label_ != nullptr) {
-        const char* mute_text = lv_label_get_text(mute_label_);
-        if (mute_text) {
-            lv_label_set_text(welcome_mute_label_, mute_text);
-        }
-    }
-}
-
-void LcdDisplay::UpdateBatteryIcon(const char* icon) {
-    DisplayLockGuard lock(this);
-    
-    // 更新状态栏中的电池图标
-    if (battery_label_ != nullptr) {
-        lv_label_set_text(battery_label_, icon);
-    }
-    
-    // 同时更新欢迎界面中的电池图标
-    if (welcome_battery_label_ != nullptr) {
-        lv_label_set_text(welcome_battery_label_, icon);
-    }
-
-    // 调整图标位置
-    AdjustIconPositions();
-}
-
-void LcdDisplay::AdjustIconPositions() {
-    DisplayLockGuard lock(this);
-    
-    // 通过编译配置判断是否支持电池
-    bool supports_battery = false;
-    
-    // 只检查 ran-lcd-wifi 机型
-#if defined(CONFIG_BOARD_TYPE_RAN_LCD_WIFI)
-    supports_battery = true;
-#else
-    // 其他机型（包括 lichuang-dev）不支持电池
-    supports_battery = false;
-#endif
-    
-    // 根据是否支持电池调整图标位置
-    if (supports_battery) {
-        // 如果支持电池功能，设置图标位置
-        if (welcome_battery_label_ != nullptr) {
-            lv_obj_clear_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_align(welcome_battery_label_, LV_ALIGN_TOP_RIGHT, -10, 5);
-        }
-        if (welcome_network_label_ != nullptr) {
-            lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -40, 5);
-        }
-        if (welcome_mute_label_ != nullptr) {
-            lv_obj_align(welcome_mute_label_, LV_ALIGN_TOP_RIGHT, -70, 5);
-        }
-    } else {
-        // 如果不支持电池功能，隐藏电池图标，调整其他位置
-        if (welcome_battery_label_ != nullptr) {
-            lv_obj_add_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
-        }
-        if (welcome_network_label_ != nullptr) {
-            lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -10, 5);
-        }
-        if (welcome_mute_label_ != nullptr) {
-            lv_obj_align(welcome_mute_label_, LV_ALIGN_TOP_RIGHT, -40, 5);
-        }
-    }
-}
-
-void LcdDisplay::UpdateNetworkIcon(const char* icon) {
-    DisplayLockGuard lock(this);
-    
-    // 更新状态栏中的网络图标
-    if (network_label_ != nullptr) {
-        lv_label_set_text(network_label_, icon);
-    }
-    
-    // 同时更新欢迎界面中的网络图标
-    if (welcome_network_label_ != nullptr) {
-        lv_label_set_text(welcome_network_label_, icon);
-    }
-}
-
-
-void LcdDisplay::ChangeWallpaper(const char* direction) {
-    DisplayLockGuard lock(this);
-
-    if (bg_img_ == nullptr) {
-        ESP_LOGE(TAG, "Background image not initialized");
-        return;
-    }
-
-    // 获取当前分辨率
-    int width = width_;
-    int height = height_;
-    
-    // 获取当前分辨率对应的壁纸数组
-    const lv_img_dsc_t** wallpapers_array = GetWallpapersForResolution(width, height);
-    
-    // 计算壁纸数量
-    int wallpaper_count = 4; // 假设总是有4个壁纸
-    
-    if (strcmp(direction, "next") == 0) {
-        current_wallpaper_index_ = (current_wallpaper_index_ + 1) % wallpaper_count;
-    } else if (strcmp(direction, "previous") == 0) {
-        current_wallpaper_index_ = (current_wallpaper_index_ - 1 + wallpaper_count) % wallpaper_count;
-    }
-
-    ESP_LOGI(TAG, "Changing wallpaper to index %d for resolution %dx%d", current_wallpaper_index_, width, height);
-    
-    // 设置新壁纸
-    lv_img_set_src(bg_img_, wallpapers_array[current_wallpaper_index_]);
-
-    // 保存当前壁纸设置到NVS
-    nvs_handle_t handle;
-    esp_err_t err = nvs_open("storage", NVS_READWRITE, &handle);
-    if (err == ESP_OK) {
-        nvs_set_u8(handle, "wallpaper", current_wallpaper_index_);
-        nvs_commit(handle);
-        nvs_close(handle);
-    }
-}
 #else
 void LcdDisplay::SetupUI() {
     DisplayLockGuard lock(this);
 
     auto screen = lv_screen_active();
+    
+    // 首先设置欢迎界面
+    SetupWelcomeUI(screen);
+    
+    // 然后设置普通模式的界面
     lv_obj_set_style_text_font(screen, fonts_.text_font, 0);
     lv_obj_set_style_text_color(screen, current_theme.text, 0);
     lv_obj_set_style_bg_color(screen, current_theme.background, 0);
@@ -1048,6 +1039,7 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_color(status_label_, current_theme.text, 0);
     lv_label_set_text(status_label_, Lang::Strings::INITIALIZING);
+
     mute_label_ = lv_label_create(status_bar_);
     lv_label_set_text(mute_label_, "");
     lv_obj_set_style_text_font(mute_label_, fonts_.icon_font, 0);
@@ -1070,166 +1062,8 @@ void LcdDisplay::SetupUI() {
     lv_obj_center(low_battery_label);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
 
-	    // 创建欢迎容器 - 直接放在屏幕上，而不是container_中
-    welcome_container_ = lv_obj_create(screen);
-    lv_obj_set_style_radius(welcome_container_, 0, 0);
-    lv_obj_set_size(welcome_container_, LV_HOR_RES, LV_VER_RES); // 设置为全屏大小
-    lv_obj_set_style_pad_all(welcome_container_, 0, 0);
-    lv_obj_set_style_border_width(welcome_container_, 0, 0); // 移除边框
-    
-    // 创建背景图片
-    bg_img_ = lv_img_create(welcome_container_);
-    
-    // 从NVS读取上次保存的壁纸设置
-    nvs_handle_t handle;
-    esp_err_t err = nvs_open("storage", NVS_READWRITE, &handle);
-    if (err == ESP_OK) {
-        uint8_t saved_index;
-        err = nvs_get_u8(handle, "wallpaper", &saved_index);
-        if (err == ESP_OK) {
-            current_wallpaper_index_ = saved_index;
-        } else {
-            current_wallpaper_index_ = 0; // 如果没有保存的设置，使用第一个壁纸
-        }
-        nvs_close(handle);
-    }
-
-    // 设置壁纸
-    const lv_img_dsc_t** wallpapers_array = GetWallpapersForResolution(width_, height_);
-    // 固定壁纸数量为4
-    int wallpaper_count = 4;
-    
-    if (current_wallpaper_index_ >= wallpaper_count) {
-        current_wallpaper_index_ = 0;
-    }
-    lv_img_set_src(bg_img_, wallpapers_array[current_wallpaper_index_]);
-    lv_obj_set_size(bg_img_, LV_PCT(100), LV_PCT(100));
-    lv_obj_center(bg_img_);
-    lv_obj_set_style_img_recolor_opa(bg_img_, 50, 0);
-    lv_obj_set_style_img_recolor(bg_img_, lv_color_black(), 0);
-    
-    // 获取当前时间和日期
-    time_t now = time(nullptr);
-    struct tm* timeinfo = localtime(&now);
-    
-    // 获取日期和星期
-    int day = timeinfo->tm_mday;
-    const char* weekdays[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
-    const char* weekday = weekdays[timeinfo->tm_wday];
-    
-    // 格式化日期为 "23 周日" 格式
-    char date_str[20];
-    snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
-    
-    // 创建日期标签 - 使用丁丁字体
-    lv_obj_t* date_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(date_label, &font_dingding, 0);
-    lv_obj_set_style_text_color(date_label, lv_color_white(), 0);
-    lv_label_set_text(date_label, date_str);
-    lv_obj_align(date_label, LV_ALIGN_TOP_RIGHT, -10, 90);
-    
-    // 创建分离的时间标签
-    hour_label_ = lv_label_create(welcome_container_);
-    colon_label_ = lv_label_create(welcome_container_);
-    minute_label_ = lv_label_create(welcome_container_);
-    
-    // 设置字体和颜色
-    lv_obj_set_style_text_font(hour_label_, &font_time, 0);
-    lv_obj_set_style_text_font(colon_label_, &font_time, 0);
-    lv_obj_set_style_text_font(minute_label_, &font_time, 0);
-    lv_obj_set_style_text_color(hour_label_, lv_color_white(), 0);
-    lv_obj_set_style_text_color(colon_label_, lv_color_white(), 0);
-    lv_obj_set_style_text_color(minute_label_, lv_color_white(), 0);
-    
-    // 设置初始文本
-    lv_label_set_text(hour_label_, "00");
-    lv_label_set_text(colon_label_, ":");
-    lv_label_set_text(minute_label_, "00");
-    
-    // 禁用标签的自动换行
-    lv_label_set_long_mode(hour_label_, LV_LABEL_LONG_CLIP);
-    lv_label_set_long_mode(colon_label_, LV_LABEL_LONG_CLIP);
-    lv_label_set_long_mode(minute_label_, LV_LABEL_LONG_CLIP);
-    
-    // 设置固定宽度 - 为40号字体设置更大的宽度
-    lv_coord_t hour_width = 60;  // 为40号字体增加宽度
-    lv_coord_t minute_width = 60; // 为40号字体增加宽度
-    lv_obj_set_width(hour_label_, hour_width);
-    lv_obj_set_width(minute_label_, minute_width);
-    
-    // 设置文本对齐方式为居中
-    lv_obj_set_style_text_align(hour_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_align(minute_label_, LV_TEXT_ALIGN_CENTER, 0);
-    
-    // 获取冒号的实际宽度
-    lv_obj_update_layout(colon_label_);
-    lv_coord_t colon_width = lv_obj_get_width(colon_label_);
-    
-    // 定义标签之间的固定间距
-    lv_coord_t spacing = 2; // 为40号字体增加间距
-    
-    // 计算总宽度
-    lv_coord_t total_width = hour_width + spacing + colon_width + spacing + minute_width;
-    
-    // 计算起始x坐标（从右边缘向左偏移）
-    lv_coord_t right_margin = 5; // 右边距
-    lv_coord_t start_x = LV_HOR_RES - right_margin - total_width;
-    
-    // 计算时间标签的垂直位置 - 在日期下方，电池图标上方
-    lv_coord_t time_y = 40; // 距离顶部40像素，可以根据需要调整
-    
-    // 设置每个标签的精确位置
-    lv_obj_set_pos(hour_label_, LV_HOR_RES - hour_width - spacing - colon_width - spacing - minute_width - 10, time_y);
-    lv_obj_set_pos(colon_label_, LV_HOR_RES - colon_width - spacing - minute_width - 10, time_y);
-    lv_obj_set_pos(minute_label_, LV_HOR_RES - minute_width - 10, time_y);
-    
-    // 创建欢迎界面上的电池图标
-    lv_obj_t* welcome_battery_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(welcome_battery_label, fonts_.icon_font, 0);
-    lv_obj_set_style_text_color(welcome_battery_label, lv_color_white(), 0);
-    lv_label_set_text(welcome_battery_label, "");
-    lv_obj_align(welcome_battery_label, LV_ALIGN_TOP_RIGHT, -10, 5);
-    
-    // 创建欢迎界面上的WiFi图标
-    lv_obj_t* welcome_network_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(welcome_network_label, fonts_.icon_font, 0);
-    lv_obj_set_style_text_color(welcome_network_label, lv_color_white(), 0);
-    lv_label_set_text(welcome_network_label, "");
-    lv_obj_align(welcome_network_label, LV_ALIGN_TOP_RIGHT, -40, 5);
-    
-    // 创建欢迎界面上的静音图标
-    lv_obj_t* welcome_mute_label = lv_label_create(welcome_container_);
-    lv_obj_set_style_text_font(welcome_mute_label, fonts_.icon_font, 0);
-    lv_obj_set_style_text_color(welcome_mute_label, lv_color_white(), 0);
-    lv_label_set_text(welcome_mute_label, "");
-    lv_obj_align(welcome_mute_label, LV_ALIGN_TOP_RIGHT, -70, 5);
-    
-    // 保存这些标签的引用，以便稍后更新
-    welcome_battery_label_ = welcome_battery_label;
-    welcome_network_label_ = welcome_network_label;
-    welcome_mute_label_ = welcome_mute_label;
-    
-    // 调整图标位置
-    AdjustIconPositions();
-    
-    // 初始时显示欢迎界面，隐藏聊天界面和状态栏
-    lv_obj_clear_flag(welcome_container_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN); // 隐藏整个container_，包括状态栏和聊天区域
-    
-    // 初始化冒号闪烁定时器
-    esp_timer_handle_t colon_timer;
-    esp_timer_create_args_t timer_args = {
-        .callback = &colon_blink_timer_callback,
-        .arg = this,
-        .dispatch_method = ESP_TIMER_TASK,
-        .name = "colon_blink_timer"
-    };
-    
-    esp_timer_create(&timer_args, &colon_timer);
-    esp_timer_start_periodic(colon_timer, 1000000); // 1秒 = 1000000微秒
-
-    // 强制立即更新一次时间显示，确保初始显示正确
-    ShowTimeAndDate();
+    // 初始时隐藏聊天界面，显示欢迎界面
+    lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN);
 }
 
 void LcdDisplay::SetChatMessage(const char* role, const char* content) {
@@ -1268,213 +1102,6 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
     // 普通模式下的消息显示
     if (chat_message_label_ != nullptr) {
         lv_label_set_text(chat_message_label_, content);
-    }
-}
-
-void LcdDisplay::ShowTimeAndDate() {
-    DisplayLockGuard lock(this);
-    
-    if (welcome_container_ == nullptr) {
-        return;
-    }
-    
-    // 获取当前时间和日期
-    time_t now = time(nullptr);
-    struct tm* timeinfo = localtime(&now);
-    
-    // 格式化小时和分钟
-    char hour_str[3];
-    char min_str[3];
-    snprintf(hour_str, sizeof(hour_str), "%02d", timeinfo->tm_hour);
-    snprintf(min_str, sizeof(min_str), "%02d", timeinfo->tm_min);
-    
-    // 更新小时和分钟标签
-    if (hour_label_ != nullptr) {
-        lv_label_set_text(hour_label_, hour_str);
-    }
-    
-    if (minute_label_ != nullptr) {
-        lv_label_set_text(minute_label_, min_str);
-    }
-    
-    // 控制冒号的可见性
-    if (colon_label_ != nullptr) {
-        if (colon_visible) {
-            // 显示冒号
-            lv_obj_clear_flag(colon_label_, LV_OBJ_FLAG_HIDDEN);
-        } else {
-            // 隐藏冒号
-            lv_obj_add_flag(colon_label_, LV_OBJ_FLAG_HIDDEN);
-        }
-    }
-    
-    // 获取日期和星期
-    int day = timeinfo->tm_mday;
-    const char* weekdays[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
-    const char* weekday = weekdays[timeinfo->tm_wday];
-    
-    // 格式化日期为 "23 周日" 格式
-    char date_str[20];
-    snprintf(date_str, sizeof(date_str), "%d %s", day, weekday);
-    
-    // 查找日期标签
-    lv_obj_t* date_label = NULL;
-    
-    // 遍历welcome_container_的子对象，找到日期标签
-    for (uint32_t i = 0; i < lv_obj_get_child_cnt(welcome_container_); i++) {
-        lv_obj_t* child = lv_obj_get_child(welcome_container_, i);
-        if (child != NULL && child != hour_label_ && child != colon_label_ && child != minute_label_ &&
-            child != welcome_battery_label_ && child != welcome_network_label_) {
-            // 假设第一个非时间标签、非图标的标签是日期标签
-            if (lv_obj_check_type(child, &lv_label_class)) {
-                date_label = child;
-                break;
-            }
-        }
-    }
-    
-    // 更新日期标签（只在日期变化时更新）
-    static int last_day = -1;
-    static int last_wday = -1;
-    
-    if (date_label != NULL && (day != last_day || timeinfo->tm_wday != last_wday || last_day == -1)) {
-        lv_label_set_text(date_label, date_str);
-        last_day = day;
-        last_wday = timeinfo->tm_wday;
-    }
-    
-    // 同步欢迎界面上的电池和网络图标
-    if (welcome_battery_label_ != nullptr && battery_label_ != nullptr) {
-        const char* battery_text = lv_label_get_text(battery_label_);
-        if (battery_text && strlen(battery_text) > 0) {
-            lv_label_set_text(welcome_battery_label_, battery_text);
-        }
-    }
-    
-    if (welcome_network_label_ != nullptr && network_label_ != nullptr) {
-        const char* network_text = lv_label_get_text(network_label_);
-        if (network_text && strlen(network_text) > 0) {
-            lv_label_set_text(welcome_network_label_, network_text);
-        }
-    }
-    
-    // 同步欢迎界面上的静音图标
-    if (welcome_mute_label_ != nullptr && mute_label_ != nullptr) {
-        const char* mute_text = lv_label_get_text(mute_label_);
-        if (mute_text) {
-            lv_label_set_text(welcome_mute_label_, mute_text);
-        }
-    }
-}
-
-void LcdDisplay::UpdateBatteryIcon(const char* icon) {
-    DisplayLockGuard lock(this);
-    
-    // 更新状态栏中的电池图标
-    if (battery_label_ != nullptr) {
-        lv_label_set_text(battery_label_, icon);
-    }
-    
-    // 同时更新欢迎界面中的电池图标
-    if (welcome_battery_label_ != nullptr) {
-        lv_label_set_text(welcome_battery_label_, icon);
-    }
-
-    // 调整图标位置
-    AdjustIconPositions();
-}
-
-void LcdDisplay::AdjustIconPositions() {
-    DisplayLockGuard lock(this);
-    
-    // 通过编译配置判断是否支持电池
-    bool supports_battery = false;
-    
-    // 只检查 ran-lcd-wifi 机型
-#if defined(CONFIG_BOARD_TYPE_RAN_LCD_WIFI)
-    supports_battery = true;
-#else
-    // 其他机型（包括 lichuang-dev）不支持电池
-    supports_battery = false;
-#endif
-    
-    // 根据是否支持电池调整图标位置
-    if (supports_battery) {
-        // 如果支持电池功能，设置图标位置
-        if (welcome_battery_label_ != nullptr) {
-            lv_obj_clear_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_align(welcome_battery_label_, LV_ALIGN_TOP_RIGHT, -10, 5);
-        }
-        if (welcome_network_label_ != nullptr) {
-            lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -40, 5);
-        }
-        if (welcome_mute_label_ != nullptr) {
-            lv_obj_align(welcome_mute_label_, LV_ALIGN_TOP_RIGHT, -70, 5);
-        }
-    } else {
-        // 如果不支持电池功能，隐藏电池图标，调整其他位置
-        if (welcome_battery_label_ != nullptr) {
-            lv_obj_add_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
-        }
-        if (welcome_network_label_ != nullptr) {
-            lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -10, 5);
-        }
-        if (welcome_mute_label_ != nullptr) {
-            lv_obj_align(welcome_mute_label_, LV_ALIGN_TOP_RIGHT, -40, 5);
-        }
-    }
-}
-
-void LcdDisplay::UpdateNetworkIcon(const char* icon) {
-    DisplayLockGuard lock(this);
-    
-    // 更新状态栏中的网络图标
-    if (network_label_ != nullptr) {
-        lv_label_set_text(network_label_, icon);
-    }
-    
-    // 同时更新欢迎界面中的网络图标
-    if (welcome_network_label_ != nullptr) {
-        lv_label_set_text(welcome_network_label_, icon);
-    }
-}
-
-void LcdDisplay::ChangeWallpaper(const char* direction) {
-    DisplayLockGuard lock(this);
-
-    if (bg_img_ == nullptr) {
-        ESP_LOGE(TAG, "Background image not initialized");
-        return;
-    }
-
-    // 获取当前分辨率
-    int width = width_;
-    int height = height_;
-    
-    // 获取当前分辨率对应的壁纸数组
-    const lv_img_dsc_t** wallpapers_array = GetWallpapersForResolution(width, height);
-    
-    // 计算壁纸数量
-    int wallpaper_count = 4; // 假设总是有4个壁纸
-    
-    if (strcmp(direction, "next") == 0) {
-        current_wallpaper_index_ = (current_wallpaper_index_ + 1) % wallpaper_count;
-    } else if (strcmp(direction, "previous") == 0) {
-        current_wallpaper_index_ = (current_wallpaper_index_ - 1 + wallpaper_count) % wallpaper_count;
-    }
-
-    ESP_LOGI(TAG, "Changing wallpaper to index %d for resolution %dx%d", current_wallpaper_index_, width, height);
-    
-    // 设置新壁纸
-    lv_img_set_src(bg_img_, wallpapers_array[current_wallpaper_index_]);
-
-    // 保存当前壁纸设置到NVS
-    nvs_handle_t handle;
-    esp_err_t err = nvs_open("storage", NVS_READWRITE, &handle);
-    if (err == ESP_OK) {
-        nvs_set_u8(handle, "wallpaper", current_wallpaper_index_);
-        nvs_commit(handle);
-        nvs_close(handle);
     }
 }
 #endif
