@@ -766,6 +766,9 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_color(low_battery_label, lv_color_white(), 0);
     lv_obj_center(low_battery_label);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
+
+    // 初始时隐藏聊天界面，显示欢迎界面
+    lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN);
 }
 
 #define  MAX_MESSAGES 20
