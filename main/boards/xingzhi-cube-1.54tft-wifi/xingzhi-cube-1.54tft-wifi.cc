@@ -108,8 +108,11 @@ private:
 
         volume_up_button_.OnLongPress([this]() {
             power_save_timer_->WakeUp();
-            GetAudioCodec()->SetOutputVolume(100);
-            GetDisplay()->ShowNotification(Lang::Strings::MAX_VOLUME);
+            if (display_) {
+                ESP_LOGI(TAG, "Switching to next wallpaper");
+                display_->ChangeWallpaper("next");
+                GetDisplay()->ShowNotification("下一张壁纸");
+            }
         });
 
         volume_down_button_.OnClick([this]() {
@@ -125,8 +128,11 @@ private:
 
         volume_down_button_.OnLongPress([this]() {
             power_save_timer_->WakeUp();
-            GetAudioCodec()->SetOutputVolume(0);
-            GetDisplay()->ShowNotification(Lang::Strings::MUTED);
+            if (display_) {
+                ESP_LOGI(TAG, "Switching to previous wallpaper");
+                display_->ChangeWallpaper("previous");
+                GetDisplay()->ShowNotification("上一张壁纸");
+            }
         });
     }
 
@@ -172,7 +178,7 @@ private:
         thing_manager.AddThing(iot::CreateThing("Speaker"));
         thing_manager.AddThing(iot::CreateThing("Screen"));
         thing_manager.AddThing(iot::CreateThing("Battery"));
-        thing_manager.AddThing(iot::CreateThing("Screen"));
+        thing_manager.AddThing(iot::CreateThing("Wallpaper"));
     }
 
 public:

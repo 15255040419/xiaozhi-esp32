@@ -565,8 +565,8 @@ void LcdDisplay::AdjustIconPositions() {
     // 通过编译配置判断是否支持电池
     bool supports_battery = false;
     
-    // 只检查 ran-lcd-wifi 机型
-#if defined(CONFIG_BOARD_TYPE_RAN_LCD_WIFI)
+    // 检查机型
+#if defined(CONFIG_BOARD_TYPE_RAN_LCD_WIFI) || defined(CONFIG_BOARD_TYPE_XINGZHI_CUBE_1_54TFT_WIFI) || defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_1_54TFT_ML307)
     supports_battery = true;
 #else
     // 其他机型（包括 lichuang-dev）不支持电池
