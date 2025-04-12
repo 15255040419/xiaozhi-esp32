@@ -385,14 +385,11 @@ void LcdDisplay::SetupWelcomeUI(lv_obj_t* screen) {
     // 计算总宽度
     lv_coord_t total_width = hour_width + spacing + colon_width + spacing + minute_width;
     
-    // 计算起始x坐标（从右边缘向左偏移）
-    lv_coord_t right_margin = 5; // 右边距
-    lv_coord_t start_x = LV_HOR_RES - right_margin - total_width;
-    
     // 计算时间标签的垂直位置 - 在日期下方，电池图标上方
     lv_coord_t time_y = 40; // 距离顶部40像素，可以根据需要调整
     
     // 设置每个标签的精确位置
+    // 注意：这里使用固定的右边距 10 像素
     lv_obj_set_pos(hour_label_, LV_HOR_RES - hour_width - spacing - colon_width - spacing - minute_width - 10, time_y);
     lv_obj_set_pos(colon_label_, LV_HOR_RES - colon_width - spacing - minute_width - 10, time_y);
     lv_obj_set_pos(minute_label_, LV_HOR_RES - minute_width - 10, time_y);
@@ -523,6 +520,11 @@ void LcdDisplay::ShowTimeAndDate() {
         const char* battery_text = lv_label_get_text(battery_label_);
         if (battery_text && strlen(battery_text) > 0) {
             lv_label_set_text(welcome_battery_label_, battery_text);
+            // 确保电池图标可见
+            lv_obj_clear_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            // 如果没有电池文本，隐藏电池图标
+            lv_obj_add_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
         }
     }
     
@@ -540,6 +542,9 @@ void LcdDisplay::ShowTimeAndDate() {
             lv_label_set_text(welcome_mute_label_, mute_text);
         }
     }
+    
+    // 重新调整图标位置以确保布局正确
+    AdjustIconPositions();
 }
 
 void LcdDisplay::UpdateBatteryIcon(const char* icon) {
@@ -553,6 +558,12 @@ void LcdDisplay::UpdateBatteryIcon(const char* icon) {
     // 同时更新欢迎界面中的电池图标
     if (welcome_battery_label_ != nullptr) {
         lv_label_set_text(welcome_battery_label_, icon);
+        // 确保电池图标可见
+        if (icon && strlen(icon) > 0) {
+            lv_obj_clear_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
+        }
     }
 
     // 调整图标位置
@@ -562,22 +573,40 @@ void LcdDisplay::UpdateBatteryIcon(const char* icon) {
 void LcdDisplay::AdjustIconPositions() {
     DisplayLockGuard lock(this);
     
-    // 通过编译配置判断是否支持电池
+    // 直接根据聊天界面电池图标的状态来判断是否显示欢迎界面电池图标
     bool supports_battery = false;
     
-    // 检查机型
-#if defined(CONFIG_BOARD_TYPE_RAN_LCD_WIFI) || defined(CONFIG_BOARD_TYPE_XINGZHI_CUBE_1_54TFT_WIFI) || defined(CONFIG_BOARD_TYPE_XINGZHI_Cube_1_54TFT_ML307)
-    supports_battery = true;
-#else
-    // 其他机型（包括 lichuang-dev）不支持电池
-    supports_battery = false;
-#endif
+    // 检查聊天界面的电池图标是否存在且有内容
+    if (battery_label_ != nullptr) {
+        const char* battery_text = lv_label_get_text(battery_label_);
+        if (battery_text && strlen(battery_text) > 0) {
+            supports_battery = true;
+        }
+    }
+    
+    // 强制同步电池图标状态到欢迎界面
+    if (welcome_battery_label_ != nullptr) {
+        if (supports_battery) {
+            // 如果支持电池，确保电池图标可见
+            lv_obj_clear_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
+            // 如果电池图标为空但支持电池，复制聊天界面的电池图标
+            const char* welcome_battery_text = lv_label_get_text(welcome_battery_label_);
+            if (!welcome_battery_text || strlen(welcome_battery_text) == 0) {
+                const char* battery_text = lv_label_get_text(battery_label_);
+                if (battery_text && strlen(battery_text) > 0) {
+                    lv_label_set_text(welcome_battery_label_, battery_text);
+                }
+            }
+        } else {
+            // 如果不支持电池，隐藏电池图标
+            lv_obj_add_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
     
     // 根据是否支持电池调整图标位置
     if (supports_battery) {
         // 如果支持电池功能，设置图标位置
         if (welcome_battery_label_ != nullptr) {
-            lv_obj_clear_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
             lv_obj_align(welcome_battery_label_, LV_ALIGN_TOP_RIGHT, -10, 5);
         }
         if (welcome_network_label_ != nullptr) {
@@ -587,10 +616,7 @@ void LcdDisplay::AdjustIconPositions() {
             lv_obj_align(welcome_mute_label_, LV_ALIGN_TOP_RIGHT, -70, 5);
         }
     } else {
-        // 如果不支持电池功能，隐藏电池图标，调整其他位置
-        if (welcome_battery_label_ != nullptr) {
-            lv_obj_add_flag(welcome_battery_label_, LV_OBJ_FLAG_HIDDEN);
-        }
+        // 如果不支持电池功能，调整其他位置
         if (welcome_network_label_ != nullptr) {
             lv_obj_align(welcome_network_label_, LV_ALIGN_TOP_RIGHT, -10, 5);
         }
