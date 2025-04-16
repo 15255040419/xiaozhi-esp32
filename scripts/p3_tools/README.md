@@ -85,7 +85,6 @@ pip install librosa opuslib numpy tqdm sounddevice pyloudnorm soundfile
 ```bash
 pip install -r requirements.txt
 ```
-
 ## P3格式说明
 
 P3格式是一种简单的流式音频格式，结构如下：
