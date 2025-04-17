@@ -382,9 +382,6 @@ void LcdDisplay::SetupWelcomeUI(lv_obj_t* screen) {
     // 定义标签之间的固定间距
     lv_coord_t spacing = 2; // 为40号字体增加间距
     
-    // 计算总宽度
-    lv_coord_t total_width = hour_width + spacing + colon_width + spacing + minute_width;
-    
     // 计算时间标签的垂直位置 - 在日期下方，电池图标上方
     lv_coord_t time_y = 40; // 距离顶部40像素，可以根据需要调整
     
@@ -788,10 +785,10 @@ void LcdDisplay::SetupUI() {
     lv_obj_align(low_battery_popup_, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_set_style_bg_color(low_battery_popup_, current_theme.low_battery, 0);
     lv_obj_set_style_radius(low_battery_popup_, 10, 0);
-    lv_obj_t* low_battery_label = lv_label_create(low_battery_popup_);
-    lv_label_set_text(low_battery_label, Lang::Strings::BATTERY_NEED_CHARGE);
-    lv_obj_set_style_text_color(low_battery_label, lv_color_white(), 0);
-    lv_obj_center(low_battery_label);
+    low_battery_label_ = lv_label_create(low_battery_popup_);
+    lv_label_set_text(low_battery_label_, Lang::Strings::BATTERY_NEED_CHARGE);
+    lv_obj_set_style_text_color(low_battery_label_, lv_color_white(), 0);
+    lv_obj_center(low_battery_label_);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
 
     // 初始时隐藏聊天界面，显示欢迎界面
@@ -1086,10 +1083,10 @@ void LcdDisplay::SetupUI() {
     lv_obj_align(low_battery_popup_, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_set_style_bg_color(low_battery_popup_, current_theme.low_battery, 0);
     lv_obj_set_style_radius(low_battery_popup_, 10, 0);
-    lv_obj_t* low_battery_label = lv_label_create(low_battery_popup_);
-    lv_label_set_text(low_battery_label, Lang::Strings::BATTERY_NEED_CHARGE);
-    lv_obj_set_style_text_color(low_battery_label, lv_color_white(), 0);
-    lv_obj_center(low_battery_label);
+    low_battery_label_ = lv_label_create(low_battery_popup_);
+    lv_label_set_text(low_battery_label_, Lang::Strings::BATTERY_NEED_CHARGE);
+    lv_obj_set_style_text_color(low_battery_label_, lv_color_white(), 0);
+    lv_obj_center(low_battery_label_);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
 
     // 初始时隐藏聊天界面，显示欢迎界面
