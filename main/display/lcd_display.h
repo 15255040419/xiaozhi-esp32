@@ -19,19 +19,11 @@ protected:
     lv_obj_t* content_ = nullptr;
     lv_obj_t* container_ = nullptr;
     lv_obj_t* side_bar_ = nullptr;
-    lv_obj_t* welcome_container_ = nullptr;
+#if CONFIG_USE_GIF_EMOTION_STYLE
+    lv_obj_t* emotion_gif = nullptr;
+#endif
 
     DisplayFonts fonts_;
-
-    // 欢迎界面上的电池和网络图标
-    lv_obj_t* welcome_battery_label_ = nullptr;
-    lv_obj_t* welcome_network_label_ = nullptr;
-    lv_obj_t* welcome_mute_label_ = nullptr;
-
-    // 时钟显示标签
-    lv_obj_t* hour_label_ = nullptr;
-    lv_obj_t* colon_label_ = nullptr;
-    lv_obj_t* minute_label_ = nullptr;
 
     void SetupUI();
     virtual bool Lock(int timeout_ms = 0) override;
@@ -52,29 +44,6 @@ public:
 
     // Add theme switching function
     virtual void SetTheme(const std::string& theme_name) override;
-
-    // 添加显示时间和日期的方法
-    void ShowTimeAndDate();
-    
-    // 更新电池图标（同时更新状态栏和欢迎界面）
-    void UpdateBatteryIcon(const char* icon);
-    
-    // 更新网络图标（同时更新状态栏和欢迎界面）
-    void UpdateNetworkIcon(const char* icon);
-
-    // 更换背景壁纸
-    void ChangeWallpaper(const char* wallpaper_name);
-
-private:
-    // 获取当前日期字符串（格式：日 周几）
-    std::string GetDateString();
-    // 获取当前时间字符串
-    std::string GetTimeString();
-
-    // 当前壁纸索引
-    int current_wallpaper_index_ = 0;
-    // 壁纸图像对象
-    lv_obj_t* bg_img_ = nullptr;
 };
 
 // RGB LCD显示器
