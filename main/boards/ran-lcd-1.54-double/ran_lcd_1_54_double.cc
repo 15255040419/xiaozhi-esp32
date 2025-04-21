@@ -10,8 +10,9 @@
 #include "led/single_led.h"
 #include "assets/lang_config.h"
 #include "../xingzhi-cube-1.54tft-wifi/power_manager.h"
-#include "boards/common/dual_network_board.h"
-
+#include "boards/common/double_network_board.h"
+#include "settings.h"
+#include <wifi_station.h>
 #include <esp_log.h>
 #include <esp_lcd_panel_vendor.h>
 
@@ -24,7 +25,7 @@ LV_FONT_DECLARE(font_puhui_20_4);
 LV_FONT_DECLARE(font_awesome_20_4);
 
 
-class RAN_LCD_1_54_DOUBLE : DualNetworkBoard {
+class RAN_LCD_1_54_DOUBLE : DoubleNetworkBoard {
 private:
     Button boot_button_;
     Button volume_up_button_;
@@ -89,6 +90,9 @@ private:
         boot_button_.OnClick([this]() {
             power_save_timer_->WakeUp();
             auto& app = Application::GetInstance();
+            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
+                ResetWifiConfiguration();
+            }
             app.ToggleChatState();
         });
 
@@ -186,9 +190,24 @@ private:
 		thing_manager.AddThing(iot::CreateThing("Wallpaper"));
     }
 
+    // 添加重置WiFi配置的方法
+    void ResetWifiConfiguration() {
+        if (GetNetworkType() == NetworkType::WIFI) {
+            ESP_LOGI(TAG, "重置WiFi配置");
+            // 设置强制进入AP模式的标志
+            Settings settings("wifi", true);
+            settings.SetInt("force_ap", 1);
+            // 显示提示
+            GetDisplay()->ShowNotification(Lang::Strings::ENTERING_WIFI_CONFIG_MODE);
+            // 延时后重启
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            esp_restart();
+        }
+    }
+
 public:
     RAN_LCD_1_54_DOUBLE() :
-        DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, 4096),
+        DoubleNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, 4096),
         boot_button_(BOOT_BUTTON_GPIO),
         volume_up_button_(VOLUME_UP_BUTTON_GPIO),
         volume_down_button_(VOLUME_DOWN_BUTTON_GPIO) {
@@ -232,7 +251,7 @@ public:
         if (!enabled) {
             power_save_timer_->WakeUp();
         }
-        DualNetworkBoard::SetPowerSaveMode(enabled);
+        DoubleNetworkBoard::SetPowerSaveMode(enabled);
     }
 };
 

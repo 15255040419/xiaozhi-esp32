@@ -1,4 +1,4 @@
-#include "dual_network_board.h"
+#include "double_network_board.h"
 #include "application.h"
 #include "display.h"
 #include "assets/lang_config.h"
