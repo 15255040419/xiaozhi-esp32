@@ -160,6 +160,8 @@ choice BOARD_TYPE
         bool "方便面的工作室LCD-WIFI"
     config BOARD_TYPE_RAN_LCD_4G
         bool "方便面的工作室LCD-4G"
+    config BOARD_TYPE_RAN_LCD_1_54_DOUBLE
+            bool "方便面工作室双网络切换"    
     config BOARD_TYPE_SENSECAP_WATCHER
         bool "SenseCAP Watcher"
     config BOARD_TYPE_DOIT_S3_AIBOX

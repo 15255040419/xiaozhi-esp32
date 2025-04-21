@@ -1,0 +1,15 @@
+{
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "ran-lcd-1.54-double",
+            "sdkconfig_append": []
+        },
+        {
+            "name": "ran-lcd-1.54-double",
+            "sdkconfig_append": [
+                "CONFIG_USE_WECHAT_MESSAGE_STYLE=y"
+            ]
+        }
+    ]
+}

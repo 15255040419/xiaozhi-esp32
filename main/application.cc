@@ -146,23 +146,24 @@ void Application::CheckNewVersion() {
         // Activation code is shown to the user and waiting for the user to input
         if (ota_.HasActivationCode()) {
             ShowActivationCode();
-
-            // Check again in 60 seconds or until the device is idle
-            for (int i = 0; i < 60; ++i) {
-                if (device_state_ == kDeviceStateIdle) {
-                    break;
-                }
-                vTaskDelay(pdMS_TO_TICKS(1000));
-            }
-            continue;
         }
 
-        SetDeviceState(kDeviceStateIdle);
-        display->SetChatMessage("system", "");
-        ResetDecoder();
-        PlaySound(Lang::Sounds::P3_SUCCESS);
-        // Exit the loop if upgrade or idle
-        break;
+        // This will block the loop until the activation is done or timeout
+        for (int i = 0; i < 10; ++i) {
+            ESP_LOGI(TAG, "Activating... %d/%d", i + 1, 10);
+            esp_err_t err = ota_.Activate();
+            if (err == ESP_OK) {
+                xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
+                break;
+            } else if (err == ESP_ERR_TIMEOUT) {
+                vTaskDelay(pdMS_TO_TICKS(3000));
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(10000));
+            }
+            if (device_state_ == kDeviceStateIdle) {
+                break;
+            }
+        }
     }
 }
 
