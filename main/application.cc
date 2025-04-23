@@ -329,6 +329,9 @@ void Application::Start() {
 
     /* Setup the display */
     auto display = board.GetDisplay();
+    
+    // 立即设置wakeup表情，让用户看到开机动画
+    display->SetEmotion("wakeup");
 
     /* Setup the audio codec */
     auto codec = board.GetAudioCodec();
@@ -549,6 +552,43 @@ void Application::Start() {
 
 void Application::OnClockTimer() {
     clock_ticks_++;
+    
+    static bool initial_wakeup_processed = false;  // 跟踪wakeup是否已处理完成
+    static int emotion_counter = 0;                // 表情循环计数器
+    
+    // 检查是否正在显示wakeup表情，且显示了足够长时间
+    if (device_state_ == kDeviceStateIdle && !initial_wakeup_processed) {
+        // 10秒后从wakeup切换到normal
+        if (clock_ticks_ >= 13) {
+            auto display = Board::GetInstance().GetDisplay();
+            display->SetEmotion("normal");
+            initial_wakeup_processed = true;
+            emotion_counter = 0;
+            clock_ticks_ = 0;  // 重置时钟计数
+        }
+    }
+    
+    // 只有当wakeup处理完成后，才开始normal/normal2循环
+    else if (device_state_ == kDeviceStateIdle && initial_wakeup_processed) {
+        emotion_counter++;
+        
+        // normal和normal2切换逻辑
+        if (emotion_counter == 100) {
+            // 15秒后显示normal2
+            auto display = Board::GetInstance().GetDisplay();
+            display->SetEmotion("normal2");
+        } else if (emotion_counter >= 110) {
+            // 再过10秒回到normal（总周期25秒）
+            auto display = Board::GetInstance().GetDisplay();
+            display->SetEmotion("normal");
+            emotion_counter = 0;  // 重置计数器
+        }
+    }
+    
+    // 非空闲状态时重置状态切换相关计数器，但保留initial_wakeup_processed标志
+    else if (device_state_ != kDeviceStateIdle) {
+        emotion_counter = 0;
+    }
 
     // 检查时间是否已同步，如果已同步且是第一次，立即更新欢迎界面的时间
     static bool first_time_sync = false;
@@ -750,7 +790,6 @@ void Application::SetDeviceState(DeviceState state) {
         return;
     }
     
-    clock_ticks_ = 0;
     auto previous_state = device_state_;
     device_state_ = state;
     ESP_LOGI(TAG, "STATE: %s", STATE_STRINGS[device_state_]);
@@ -765,7 +804,11 @@ void Application::SetDeviceState(DeviceState state) {
         case kDeviceStateUnknown:
         case kDeviceStateIdle:
             display->SetStatus(Lang::Strings::STANDBY);
-            display->SetEmotion("neutral");
+            
+            // 从其他状态（尤其是说话状态）切换到待命状态时，立即设置为normal表情
+            if (previous_state == kDeviceStateSpeaking || previous_state == kDeviceStateListening) {
+                display->SetEmotion("normal");
+            }
             
             // 在空闲状态时，切换回欢迎界面
             display->SetChatMessage("system", "");
@@ -784,7 +827,8 @@ void Application::SetDeviceState(DeviceState state) {
             break;
         case kDeviceStateListening:
             display->SetStatus(Lang::Strings::LISTENING);
-            display->SetEmotion("neutral");
+            // 在聆听状态显示listening表情
+            display->SetEmotion("happy");
             
             // 在聆听状态时，切换到聊天界面
             display->SetChatMessage("system", " ");
