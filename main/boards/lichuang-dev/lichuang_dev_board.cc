@@ -12,7 +12,10 @@
 #include <driver/i2c_master.h>
 #include <driver/spi_common.h>
 #include <wifi_station.h>
-#include <esp_timer.h>
+#include <esp_lcd_touch_ft5x06.h>
+#include <esp_lvgl_port.h>
+#include <lvgl.h>
+
 
 #define TAG "LichuangDevBoard"
 
@@ -161,54 +164,39 @@ private:
                                     });
     }
 
-    void PollTouchpad() {
-        static bool was_touched = false;
-        static int64_t touch_start_time = 0;
-        const int64_t TOUCH_THRESHOLD_MS = 500;  // 触摸时长阈值，超过500ms视为长按
-        
-        ft6336_->UpdateTouchPoint();
-        auto& touch_point = ft6336_->GetTouchPoint();
-        
-        // 检测触摸开始
-        if (touch_point.num > 0 && !was_touched) {
-            was_touched = true;
-            touch_start_time = esp_timer_get_time() / 1000; // 转换为毫秒
-        } 
-        // 检测触摸释放
-        else if (touch_point.num == 0 && was_touched) {
-            was_touched = false;
-            int64_t touch_duration = (esp_timer_get_time() / 1000) - touch_start_time;
-            
-            // 只有短触才触发
-            if (touch_duration < TOUCH_THRESHOLD_MS) {
-                auto& app = Application::GetInstance();
-                if (app.GetDeviceState() == kDeviceStateStarting && 
-                    !WifiStation::GetInstance().IsConnected()) {
-                    ResetWifiConfiguration();
-                }
-                app.ToggleChatState();
-            }
-        }
-    }
-
-    void InitializeFt6336TouchPad() {
-        ESP_LOGI(TAG, "Init FT6336");
-        ft6336_ = new Ft6336(i2c_bus_, TOUCH_I2C_ADDR);
-        
-        // 创建定时器，20ms 间隔
-        esp_timer_create_args_t timer_args = {
-            .callback = [](void* arg) {
-                LichuangDevBoard* board = (LichuangDevBoard*)arg;
-                board->PollTouchpad();
+    void InitializeTouch()
+    {
+        esp_lcd_touch_handle_t tp;
+        esp_lcd_touch_config_t tp_cfg = {
+            .x_max = DISPLAY_WIDTH,
+            .y_max = DISPLAY_HEIGHT,
+            .rst_gpio_num = GPIO_NUM_NC, // Shared with LCD reset
+            .int_gpio_num = GPIO_NUM_NC, 
+            .levels = {
+                .reset = 0,
+                .interrupt = 0,
             },
-            .arg = this,
-            .dispatch_method = ESP_TIMER_TASK,
-            .name = "touchpad_timer",
-            .skip_unhandled_events = true,
+            .flags = {
+                .swap_xy = 1,
+                .mirror_x = 1,
+                .mirror_y = 0,
+            },
         };
-        
-        ESP_ERROR_CHECK(esp_timer_create(&timer_args, &touchpad_timer_));
-        ESP_ERROR_CHECK(esp_timer_start_periodic(touchpad_timer_, 20 * 1000));
+        esp_lcd_panel_io_handle_t tp_io_handle = NULL;
+        esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_FT5x06_CONFIG();
+        tp_io_config.scl_speed_hz = 400000;
+
+        esp_lcd_new_panel_io_i2c(i2c_bus_, &tp_io_config, &tp_io_handle);
+        esp_lcd_touch_new_i2c_ft5x06(tp_io_handle, &tp_cfg, &tp);
+        assert(tp);
+
+        /* Add touch input (for selected screen) */
+        const lvgl_port_touch_cfg_t touch_cfg = {
+            .disp = lv_display_get_default(), 
+            .handle = tp,
+        };
+
+        lvgl_port_add_touch(&touch_cfg);
     }
 
     // 物联网初始化，添加对 AI 可见设备
@@ -224,7 +212,7 @@ public:
         InitializeI2c();
         InitializeSpi();
         InitializeSt7789Display();
-        InitializeFt6336TouchPad();
+        InitializeTouch();
         InitializeButtons();
         InitializeIot();
         GetBacklight()->RestoreBrightness();
