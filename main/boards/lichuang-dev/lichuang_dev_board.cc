@@ -15,7 +15,7 @@
 #include <esp_lcd_touch_ft5x06.h>
 #include <esp_lvgl_port.h>
 #include <lvgl.h>
-
+#include <esp_timer.h>
 
 #define TAG "LichuangDevBoard"
 
@@ -79,6 +79,12 @@ private:
     Pca9557* pca9557_;
     Ft6336* ft6336_;
     esp_timer_handle_t touchpad_timer_;
+	// 触摸状态追踪变量
+	bool was_touched_ = false;
+	int64_t touch_start_time_ = 0;
+	int touch_start_x_ = 0;
+	int touch_start_y_ = 0;
+	bool is_sliding_ = false;
 
     void InitializeI2c() {
         // Initialize I2C peripheral
@@ -163,41 +169,106 @@ private:
 #endif
                                     });
     }
+void PollTouchpad() {
+    const int64_t TOUCH_THRESHOLD_MS = 500;   // 触摸时长阈值，超过视为长按
+    const int TOUCH_MOVE_THRESHOLD = 20;      // 滑动阈值，超过视为滑动
 
-    void InitializeTouch()
-    {
-        esp_lcd_touch_handle_t tp;
-        esp_lcd_touch_config_t tp_cfg = {
-            .x_max = DISPLAY_WIDTH,
-            .y_max = DISPLAY_HEIGHT,
-            .rst_gpio_num = GPIO_NUM_NC, // Shared with LCD reset
-            .int_gpio_num = GPIO_NUM_NC, 
-            .levels = {
-                .reset = 0,
-                .interrupt = 0,
-            },
-            .flags = {
-                .swap_xy = 1,
-                .mirror_x = 1,
-                .mirror_y = 0,
-            },
-        };
-        esp_lcd_panel_io_handle_t tp_io_handle = NULL;
-        esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_FT5x06_CONFIG();
-        tp_io_config.scl_speed_hz = 400000;
-
-        esp_lcd_new_panel_io_i2c(i2c_bus_, &tp_io_config, &tp_io_handle);
-        esp_lcd_touch_new_i2c_ft5x06(tp_io_handle, &tp_cfg, &tp);
-        assert(tp);
-
-        /* Add touch input (for selected screen) */
-        const lvgl_port_touch_cfg_t touch_cfg = {
-            .disp = lv_display_get_default(), 
-            .handle = tp,
-        };
-
-        lvgl_port_add_touch(&touch_cfg);
+    ft6336_->UpdateTouchPoint();
+    auto& touch_point = ft6336_->GetTouchPoint();
+    
+    // 检测触摸开始
+    if (touch_point.num > 0 && !was_touched_) {
+        was_touched_ = true;
+        touch_start_time_ = esp_timer_get_time() / 1000; // 转换为毫秒
+        touch_start_x_ = touch_point.x;
+        touch_start_y_ = touch_point.y;
+        is_sliding_ = false;
+    } 
+    // 检测触摸中的状态
+    else if (touch_point.num > 0 && was_touched_) {
+        // 计算当前位置与起始位置的距离
+        int dx = abs(touch_point.x - touch_start_x_);
+        int dy = abs(touch_point.y - touch_start_y_);
+        
+        // 如果移动距离超过阈值，标记为正在滑动
+        if (dx > TOUCH_MOVE_THRESHOLD || dy > TOUCH_MOVE_THRESHOLD) {
+            is_sliding_ = true;
+        }
     }
+    // 检测触摸释放
+    else if (touch_point.num == 0 && was_touched_) {
+        int64_t touch_duration = (esp_timer_get_time() / 1000) - touch_start_time_;
+        
+        // 只有短按且没有滑动时才触发唤醒/打断操作
+        if (touch_duration < TOUCH_THRESHOLD_MS && !is_sliding_) {
+            auto& app = Application::GetInstance();
+            if (app.GetDeviceState() == kDeviceStateStarting && 
+                !WifiStation::GetInstance().IsConnected()) {
+                ResetWifiConfiguration();
+            }
+            app.ToggleChatState();
+        }
+        
+        // 重置触摸状态
+        was_touched_ = false;
+        is_sliding_ = false;
+    }
+}
+void InitializeTouch()
+{
+    // 1. 初始化FT6336用于全局触摸处理
+    ESP_LOGI(TAG, "Init FT6336 for global touch handling");
+    ft6336_ = new Ft6336(i2c_bus_, TOUCH_I2C_ADDR);
+    
+    // 创建定时器，20ms 间隔进行全局触摸轮询
+    esp_timer_create_args_t timer_args = {
+        .callback = [](void* arg) {
+            LichuangDevBoard* board = (LichuangDevBoard*)arg;
+            board->PollTouchpad();
+        },
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "touchpad_timer",
+        .skip_unhandled_events = true,
+    };
+    
+    ESP_ERROR_CHECK(esp_timer_create(&timer_args, &touchpad_timer_));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(touchpad_timer_, 20 * 1000));
+
+    // 2. 同时为LVGL初始化触摸控制 
+    ESP_LOGI(TAG, "Init touch for LVGL");
+    esp_lcd_touch_handle_t tp;
+    esp_lcd_touch_config_t tp_cfg = {
+        .x_max = DISPLAY_WIDTH,
+        .y_max = DISPLAY_HEIGHT,
+        .rst_gpio_num = GPIO_NUM_NC, // Shared with LCD reset
+        .int_gpio_num = GPIO_NUM_NC, 
+        .levels = {
+            .reset = 0,
+            .interrupt = 0,
+        },
+        .flags = {
+            .swap_xy = 1,
+            .mirror_x = 1,
+            .mirror_y = 0,
+        },
+    };
+    esp_lcd_panel_io_handle_t tp_io_handle = NULL;
+    esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_FT5x06_CONFIG();
+    tp_io_config.scl_speed_hz = 400000;
+
+    esp_lcd_new_panel_io_i2c(i2c_bus_, &tp_io_config, &tp_io_handle);
+    esp_lcd_touch_new_i2c_ft5x06(tp_io_handle, &tp_cfg, &tp);
+    assert(tp);
+
+    /* Add touch input (for selected screen) */
+    const lvgl_port_touch_cfg_t touch_cfg = {
+        .disp = lv_display_get_default(), 
+        .handle = tp,
+    };
+
+    lvgl_port_add_touch(&touch_cfg);
+}
 
     // 物联网初始化，添加对 AI 可见设备
     void InitializeIot() {
