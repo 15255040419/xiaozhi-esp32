@@ -165,19 +165,6 @@ bool Ota::CheckVersion() {
         ESP_LOGI(TAG, "No websocket section found!");
     }
 
-    has_websocket_config_ = false;
-    cJSON *websocket = cJSON_GetObjectItem(root, "websocket");
-    if (websocket != NULL) {
-        Settings settings("websocket", true);
-        cJSON *item = NULL;
-        cJSON_ArrayForEach(item, websocket) {
-            if (item->type == cJSON_String) {
-                settings.SetString(item->string, item->valuestring);
-            }
-        }
-        has_websocket_config_ = true;
-    }
-
     has_server_time_ = false;
     cJSON *server_time = cJSON_GetObjectItem(root, "server_time");
     if (server_time != NULL) {
