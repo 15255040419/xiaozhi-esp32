@@ -15,7 +15,7 @@
 #include <esp_lcd_touch_ft5x06.h>
 #include <esp_lvgl_port.h>
 #include <lvgl.h>
-#include <esp_timer.h>
+
 
 #define TAG "LichuangDevBoard"
 

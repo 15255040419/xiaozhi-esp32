@@ -144,6 +144,25 @@ bool Ota::CheckVersion() {
             }
         }
         has_mqtt_config_ = true;
+    } else {
+        ESP_LOGI(TAG, "No mqtt section found !");
+    }
+
+    has_websocket_config_ = false;
+    cJSON *websocket = cJSON_GetObjectItem(root, "websocket");
+    if (websocket != NULL) {
+        Settings settings("websocket", true);
+        cJSON *item = NULL;
+        cJSON_ArrayForEach(item, websocket) {
+            if (item->type == cJSON_String) {
+                settings.SetString(item->string, item->valuestring);
+            } else if (item->type == cJSON_Number) {
+                settings.SetInt(item->string, item->valueint);
+            }
+        }
+        has_websocket_config_ = true;
+    } else {
+        ESP_LOGI(TAG, "No websocket section found!");
     }
 
     has_websocket_config_ = false;
@@ -180,6 +199,8 @@ bool Ota::CheckVersion() {
             settimeofday(&tv, NULL);
             has_server_time_ = true;
         }
+    } else {
+        ESP_LOGW(TAG, "No server_time section found!");
     }
 
     has_new_version_ = false;
@@ -208,7 +229,10 @@ bool Ota::CheckVersion() {
                 has_new_version_ = true;
             }
         }
+    } else {
+        ESP_LOGW(TAG, "No firmware section found!");
     }
+
     cJSON_Delete(root);
     return true;
 }
@@ -378,7 +402,6 @@ bool Ota::IsNewVersionAvailable(const std::string& currentVersion, const std::st
 
 std::string Ota::GetActivationPayload() {
     if (!has_serial_number_) {
-        ESP_LOGI(TAG, "No serial number found");
         return "{}";
     }
 
