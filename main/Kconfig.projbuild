@@ -6,7 +6,6 @@ config OTA_URL
     help
         The application will access this URL to check for new firmwares and server address.
 
-
 choice
     prompt "语言选择"
     default LANGUAGE_ZH_CN
@@ -239,7 +238,11 @@ config USE_WECHAT_MESSAGE_STYLE
     default n
     help
         使用微信聊天界面风格
-
+config ENABLE_MUSIC_PLAYER
+	bool "启用音乐播放器功能"
+	default y
+	help
+		启用音乐播放器功能，允许播放在线音乐。
 config USE_WAKE_WORD_DETECT
     bool "启用唤醒词检测"
     default y
