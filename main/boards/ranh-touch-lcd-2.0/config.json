@@ -1,0 +1,9 @@
+{
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "ranh-touch-lcd-2.0",
+            "sdkconfig_append": []
+        }
+    ]
+}
