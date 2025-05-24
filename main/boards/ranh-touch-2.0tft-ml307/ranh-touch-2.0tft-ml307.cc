@@ -18,6 +18,7 @@
 #include <esp_lcd_touch_ft5x06.h>
 #include <esp_lvgl_port.h>
 #include <lvgl.h>
+#include <esp_timer.h>
 
 
 #define TAG "RANH_TOUCH_2_0TFT_ML307"
@@ -36,6 +37,10 @@ public:
         uint8_t data = ReadReg(0x01);
         data = (data & ~(1 << bit)) | (level << bit);
         WriteReg(0x01, data);
+    }
+
+    uint8_t ReadInputBitState(uint8_t bit) {
+        return (ReadReg(0x01) >> bit) & 0x01;
     }
 };
 
@@ -76,6 +81,8 @@ private:
     Pca9557* pca9557_;
     PowerSaveTimer* power_save_timer_;
     Pmic* pmic_ = nullptr;
+    esp_timer_handle_t headphone_timer_ = nullptr;
+    bool last_headphone_state_ = false;
 
   
     void InitializeI2c() {
@@ -248,6 +255,55 @@ private:
   
     }
 
+    // 检测耳机是否插入
+    bool IsHeadphoneInserted() {
+        if (pca9557_) {
+            uint8_t sp_set_val = pca9557_->ReadInputBitState(4); // IO4: SP_SET
+            return sp_set_val == 0; // 插入耳机时SP_SET为低
+        }
+        ESP_LOGW(TAG, "PCA9557 未初始化，无法检测耳机。");
+        return false;
+    }
+
+    // 控制功放使能
+    void SetSpeakerPaEnable(bool enable) {
+        if (pca9557_) {
+            ESP_LOGI(TAG, "设置扬声器 PA (PCA9557 IO1) 为 %s", enable ? "ON" : "OFF");
+            pca9557_->SetOutputState(1, enable ? 1 : 0); // IO1: PA_EN
+        }
+    }
+
+    // 音频路径自动切换
+    void UpdateAudioPath() {
+        bool headphone_inserted = IsHeadphoneInserted();
+        ESP_LOGI(TAG, "音频路径更新: 耳机插入: %s", headphone_inserted ? "是" : "否");
+        if (headphone_inserted) {
+            SetSpeakerPaEnable(false); // 关闭功放
+            ESP_LOGI(TAG, "音频输出切换到耳机。");
+        } else {
+            SetSpeakerPaEnable(true); // 打开功放
+            ESP_LOGI(TAG, "音频输出切换到扬声器。");
+        }
+    }
+
+    void StartHeadphoneDetectTimer() {
+        esp_timer_create_args_t timer_args = {
+            .callback = [](void* arg) {
+                auto* self = static_cast<RANH_TOUCH_2_0TFT_ML307*>(arg);
+                bool now_state = self->IsHeadphoneInserted();
+                if (now_state != self->last_headphone_state_) {
+                    self->UpdateAudioPath();
+                    self->last_headphone_state_ = now_state;
+                }
+            },
+            .arg = this,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "headphone_check"
+        };
+        esp_timer_create(&timer_args, &headphone_timer_);
+        esp_timer_start_periodic(headphone_timer_, 200 * 1000); // 200ms检测一次
+    }
+
 public:
     RANH_TOUCH_2_0TFT_ML307() : 
 		DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, 4096),
@@ -261,6 +317,8 @@ public:
         InitializeIot();
         InitializePowerSaveTimer();
         GetBacklight()->RestoreBrightness();
+        UpdateAudioPath(); // 初始化后自动切换音频路径
+        StartHeadphoneDetectTimer(); // 启动定时检测
     }
 
     virtual Led* GetLed() override {
