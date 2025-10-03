@@ -16,9 +16,18 @@
 #include <cstring>
 
 #include "board.h"
+#include "application.h"
+#include "device_state.h"
 #include "audio/audio_codec.h"
 #include "music.h"
 #include "boards/common/esp32_music.h"
+extern "C" {
+    void* clock_face_create(void* parent, int width, int height);
+    void clock_face_show(void* ctx);
+    void clock_face_hide(void* ctx);
+    bool clock_face_load_background(void* ctx, const char* asset_name);
+    void clock_face_set_loop(void* ctx, int loop_mode);
+}
 
 #define TAG "LcdDisplay"
 
@@ -1221,7 +1230,7 @@ void LcdDisplay::SetMusicInfo(const char* song_name) {
                 ESP_LOGI(TAG, "Hidden emoji interface during music playback");
             }
             
-            // 显示音乐播放器并设置歌名
+            // 显示音乐播放器并设置歌名（显隐统一由 ApplyUIMode 控制）
             music_player_ui_->Show();
             
             // 直接设置歌名（现在传入的已经是干净的歌名）
@@ -1342,6 +1351,8 @@ void LcdDisplay::SetMusicInfo(const char* song_name) {
             if (emoji_box_ != nullptr) {
                 lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
             }
+            // 触发一次协调，确保立即切换到播放器
+            OnStateMaybeChanged();
         } else {
             // 清空歌名显示，隐藏音乐播放器
             if (music_player_ui_) {
@@ -1364,9 +1375,12 @@ void LcdDisplay::SetMusicInfo(const char* song_name) {
                 // 注意：表情恢复现在统一在SetMusicDetails中处理，这里不再重复设置
                 ESP_LOGI(TAG, "Restored emoji interface after music playback ended (legacy SetMusicInfo)");
             }
+            OnStateMaybeChanged();
             
             // 停止音乐进度更新
             StopMusicProgressUpdate();
+            // 触发一次协调，确保立即切回非播放器模式
+            OnStateMaybeChanged();
         }
     #endif
     }
@@ -1520,11 +1534,11 @@ void LcdDisplay::SetMusicDetails(const char* song_title, const char* artist, boo
         if (emoji_box_ != nullptr) {
             lv_obj_remove_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Restored emoji interface after music playback ended");
-            
-            // 重新设置默认表情来恢复表情显示（会自动处理GIF/静态图片）
+            // 停止表情并显示时钟（如果处于待命）
             SetEmotion("neutral");
-            ESP_LOGI(TAG, "Restored neutral emotion after music playback");
         }
+
+        OnStateMaybeChanged();
     }
 }
 
@@ -1616,6 +1630,91 @@ void LcdDisplay::UpdateMusicLyrics(const char* lyrics) {
     }
 }
 
+void LcdDisplay::EnsureClockFaceInitialized() {
+    if (pixel_thinking_clock_ != nullptr) return;
+    // 惰性创建（需要在LVGL任务内加锁）
+    DisplayLockGuard lock(this);
+    pixel_thinking_clock_ = clock_face_create(lv_screen_active(), width_, height_);
+    // 背景与循环配置由 face.json 驱动，这里不再硬编码
+}
+
+void LcdDisplay::ShowClockFace() {
+    EnsureClockFaceInitialized();
+    DisplayLockGuard lock(this);
+    if (!clock_visible_) {
+        clock_face_show(pixel_thinking_clock_);
+        clock_visible_ = true;
+        EnableTouchVolumeControl(false);
+        // 隐藏聊天与表情层，避免遮挡
+        if (emoji_box_) lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
+        if (chat_message_label_) lv_obj_add_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
+        // 时钟界面要求隐藏状态栏
+        if (status_bar_) lv_obj_add_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void LcdDisplay::HideClockFace() {
+    DisplayLockGuard lock(this);
+    if (pixel_thinking_clock_) {
+        clock_face_hide(pixel_thinking_clock_);
+    }
+    clock_visible_ = false;
+    EnableTouchVolumeControl(true);
+    // 退出时钟界面时恢复状态栏
+    if (status_bar_) lv_obj_remove_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);
+    // 恢复聊天界面的表情可见性
+    if (emoji_box_) lv_obj_remove_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
+    // 若需要，恢复为默认表情，确保立刻有内容
+    SetEmotion("neutral");
+}
+
+void LcdDisplay::UpdateStatusBar(bool update_all) {
+    // 先调用父类，完成电池/网络/时间文本更新
+    LvglDisplay::UpdateStatusBar(update_all);
+    OnStateMaybeChanged();
+}
+
+void LcdDisplay::OnStateMaybeChanged() {
+    auto& app = Application::GetInstance();
+    auto device_state = app.GetDeviceState();
+    auto& board = Board::GetInstance();
+    auto music = board.GetMusic();
+    bool music_playing = false;
+    if (music) {
+        if (auto esp32_music = dynamic_cast<Esp32Music*>(music)) {
+            music_playing = esp32_music->IsPlaying();
+        }
+    }
+
+    UIMode target = UIMode::Chat;
+    if (device_state == kDeviceStateIdle) {
+        target = music_playing ? UIMode::Music : UIMode::Clock;
+    } else if (device_state == kDeviceStateListening || device_state == kDeviceStateSpeaking) {
+        target = UIMode::Chat;
+    }
+
+    ApplyUIMode(target);
+}
+
+void LcdDisplay::ApplyUIMode(UIMode mode) {
+    switch (mode) {
+        case UIMode::Clock:
+            HideMusicPlayer();
+            ShowClockFace();
+            break;
+        case UIMode::Music:
+            HideClockFace();
+            ShowMusicPlayer();
+            break;
+        case UIMode::Chat:
+        default:
+            HideMusicPlayer();
+            HideClockFace();
+            // 表情/聊天显示由现有逻辑维持
+            break;
+    }
+}
+
 void LcdDisplay::UpdateMusicTime(const char* current_time, const char* duration) {
     if (music_player_ui_) {
         music_player_ui_->SetCurrentTime(current_time);
@@ -1661,12 +1760,14 @@ int LcdDisplay::GetVolume() const {
 }
 
 void LcdDisplay::EnableTouchVolumeControl(bool enable) {
-    // 这里应该调用底层的触摸音量控制启用/禁用函数
-    // 具体实现取决于您现有的触摸音量控制系统
-    ESP_LOGI(TAG, "Touch volume control %s", enable ? "enabled" : "disabled");
+    // 避免高频日志刷屏，仅在状态变化时输出且降低为DEBUG级别
+    static bool last_state = !enable;
+    if (last_state != enable) {
+        last_state = enable;
+        ESP_LOGD(TAG, "Touch volume control %s", enable ? "enabled" : "disabled");
+    }
     
-    // TODO: 调用您现有的触摸音量控制开关函数
-    // 例如：Board::GetInstance().SetTouchVolumeEnabled(enable);
+    // 留空：时钟界面通过顶层容器拦截事件来避免与音量手势冲突
 }
 
 bool LcdDisplay::IsTouchVolumeControlEnabled() const {
@@ -1786,6 +1887,7 @@ void LcdDisplay::SetMusicInfoTraditional(const char* text, const char* mode_name
             lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Hidden emoji interface during traditional music playback");
         }
+        // 显隐交由 ApplyUIMode
         
         // 确保聊天消息标签是可见的，用于显示歌曲信息
         lv_obj_remove_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
@@ -1803,6 +1905,7 @@ void LcdDisplay::SetMusicInfoTraditional(const char* text, const char* mode_name
             SetEmotion("neutral");
             ESP_LOGI(TAG, "Restored neutral emotion after traditional music playback");
         }
+        OnStateMaybeChanged();
         
         // 清空歌曲信息显示
         lv_label_set_text(chat_message_label_, "");
@@ -1827,6 +1930,7 @@ void LcdDisplay::SetMusicDetailsTraditional(const char* title, const char* artis
             lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Hidden emoji interface during traditional music playback");
         }
+        // 显隐交由 ApplyUIMode
         
         // 确保聊天消息标签是可见的，用于显示歌曲信息
         lv_obj_remove_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
@@ -1849,6 +1953,7 @@ void LcdDisplay::SetMusicDetailsTraditional(const char* title, const char* artis
             SetEmotion("neutral");
             ESP_LOGI(TAG, "Restored neutral emotion after traditional music playback");
         }
+        OnStateMaybeChanged();
         
         // 清空歌曲信息显示
         lv_label_set_text(chat_message_label_, "");

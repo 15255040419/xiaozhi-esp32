@@ -9,6 +9,7 @@
 #include <spi_flash_mmap.h>
 #include <esp_timer.h>
 #include <cbin_font.h>
+#include <set>
 
 
 #define TAG "Assets"
@@ -514,4 +515,76 @@ bool Assets::GetAssetData(const std::string& name, void*& ptr, size_t& size) {
     ptr = static_cast<void*>(const_cast<char*>(data + 2));
     size = asset->second.size;
     return true;
+}
+
+std::vector<std::string> Assets::ListAssetsWithPrefix(const std::string& prefix) const {
+    std::vector<std::string> out;
+    for (const auto& kv : assets_) {
+        if (kv.first.rfind(prefix, 0) == 0) {
+            out.push_back(kv.first);
+        }
+    }
+    return out;
+}
+
+std::vector<std::string> Assets::ListClockFaces() const {
+    // 1) 优先读取清单文件（避免资产名被截断导致路径丢失）
+    {
+        void* ptr = nullptr; size_t size = 0;
+        // 依次尝试多种可能位置/文件名（尽量短，降低被截断概率）
+        auto parse_faces = [&](void* p, size_t s) -> std::vector<std::string> {
+            std::vector<std::string> faces;
+            cJSON* root = cJSON_ParseWithLength(static_cast<char*>(p), s);
+            if (root) {
+                if (cJSON_IsArray(root)) {
+                    int n = cJSON_GetArraySize(root);
+                    for (int i = 0; i < n; ++i) {
+                        cJSON* item = cJSON_GetArrayItem(root, i);
+                        if (cJSON_IsString(item)) faces.emplace_back(item->valuestring);
+                    }
+                } else if (cJSON_IsObject(root)) {
+                    cJSON* arr = cJSON_GetObjectItem(root, "faces");
+                    if (cJSON_IsArray(arr)) {
+                        int n = cJSON_GetArraySize(arr);
+                        for (int i = 0; i < n; ++i) {
+                            cJSON* item = cJSON_GetArrayItem(arr, i);
+                            if (cJSON_IsString(item)) faces.emplace_back(item->valuestring);
+                        }
+                    }
+                }
+                cJSON_Delete(root);
+            }
+            return faces;
+        };
+
+        std::vector<std::string> result;
+        auto try_file = [&](const char* name, std::vector<std::string>& out) -> bool {
+            if (const_cast<Assets*>(this)->GetAssetData(name, ptr, size)) {
+                auto faces = parse_faces(ptr, size);
+                if (!faces.empty()) {
+                    out.swap(faces);
+                    return true;
+                }
+            }
+            return false;
+        };
+        if (try_file("clock_faces.json", result) ||
+            try_file("clock_faces/clock_faces.json", result) ||
+            try_file("clock_faces/index.json", result)) {
+            return result;
+        }
+    }
+
+    // 2) 回退：从资产键名中提取 clock_faces/<name>/ 前缀（若未被截断）
+    std::set<std::string> names;
+    for (const auto& kv : assets_) {
+        std::string norm = kv.first;
+        for (auto &ch : norm) if (ch == '\\') ch = '/';
+        const std::string prefix = "clock_faces/";
+        if (norm.rfind(prefix, 0) != 0) continue;
+        size_t p2 = norm.find('/', prefix.size());
+        if (p2 == std::string::npos) continue;
+        names.insert(norm.substr(prefix.size(), p2 - prefix.size()));
+    }
+    return std::vector<std::string>(names.begin(), names.end());
 }

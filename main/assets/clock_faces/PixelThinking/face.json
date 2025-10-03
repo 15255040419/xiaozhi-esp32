@@ -1,0 +1,9 @@
+{
+    "name": "Pixel Thinking",
+    "use_gif_background": "no",
+    "background_loop": "infinite",
+    "pos_clock_hour_a": [-80, -110],
+    "pos_clock_hour_b": [-30, -110],
+    "pos_clock_min_a":  [ 30, -110],
+    "pos_clock_min_b":  [ 80, -110]
+  }

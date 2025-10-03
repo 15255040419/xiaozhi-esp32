@@ -11,11 +11,28 @@
 
 #include <atomic>
 #include <memory>
+#include <stdint.h>
 
 #define PREVIEW_IMAGE_DURATION_MS 5000
 
 
+#ifdef __cplusplus
+// C++: 使用强类型枚举
+enum class UIMode : uint8_t {
+    Clock,
+    Music,
+    Chat
+};
+#else
+// C: 提供等价占位，避免被 C 文件包含时报错
+typedef uint8_t UIMode;
+#define UIMode_Clock 0
+#define UIMode_Music 1
+#define UIMode_Chat  2
+#endif
+
 class LcdDisplay : public LvglDisplay {
+public:
 protected:
     esp_lcd_panel_io_handle_t panel_io_ = nullptr;
     esp_lcd_panel_handle_t panel_ = nullptr;
@@ -40,6 +57,13 @@ protected:
     // 音乐进度更新定时器
     esp_timer_handle_t music_progress_timer_ = nullptr;
     
+    // 时钟界面（PixelThinking）
+    void* pixel_thinking_clock_ = nullptr;
+    bool clock_visible_ = false;
+    void EnsureClockFaceInitialized();
+    void ShowClockFace();
+    void HideClockFace();
+
 
     void InitializeLcdThemes();
     void SetupUI();
@@ -58,10 +82,16 @@ protected:
     LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel, int width, int height);
     
 public:
+
     ~LcdDisplay();
     virtual void SetEmotion(const char* emotion) override;
     virtual void SetChatMessage(const char* role, const char* content) override; 
     virtual void SetPreviewImage(std::unique_ptr<LvglImage> image) override;
+    virtual void UpdateStatusBar(bool update_all = false) override;
+
+    // 公开一个状态协调点
+    void OnStateMaybeChanged();
+    void ApplyUIMode(UIMode mode);
 
     // Add theme switching function
     virtual void SetTheme(Theme* theme) override;

@@ -19,6 +19,8 @@
 #include <esp_lvgl_port.h>
 #include <lvgl.h>
 
+extern "C" bool clock_face_is_active();
+
 
 #define TAG "LichuangDevPlusBoard"
 
@@ -329,6 +331,11 @@ private:
         static int16_t start_y = 0;
         static int start_volume = 0;
         static bool gesture_active = false;
+
+        // 在时钟界面（含切换模式）激活时，彻底忽略音量手势
+        if (clock_face_is_active()) {
+            return;
+        }
         
         if (code == LV_EVENT_PRESSED) {
             lv_indev_t* indev = lv_indev_get_act();
@@ -385,6 +392,18 @@ private:
                 // 立即隐藏音量条（不使用定时器，避免死锁）
                 lv_obj_add_flag(volume_bar_obj_, LV_OBJ_FLAG_HIDDEN);
             }
+        }
+    }
+
+    // 启用/禁用触摸音量手势
+    void SetVolumeGestureEnabled(bool enabled) {
+        if (!volume_gesture_obj_) return;
+        if (enabled) {
+            lv_obj_clear_flag(volume_gesture_obj_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(volume_gesture_obj_, LV_OBJ_FLAG_CLICKABLE);
+        } else {
+            lv_obj_add_flag(volume_gesture_obj_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(volume_gesture_obj_, LV_OBJ_FLAG_CLICKABLE);
         }
     }
     
@@ -463,7 +482,7 @@ public:
         InitializeSpi();
         InitializeSt7789Display();
         InitializeButtons();
-        InitializeTouch();
+        //InitializeTouch();
         InitializeCamera();
     }
 
