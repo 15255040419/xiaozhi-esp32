@@ -36,6 +36,35 @@ LV_FONT_DECLARE(BUILTIN_TEXT_FONT);
 LV_FONT_DECLARE(BUILTIN_ICON_FONT);
 LV_FONT_DECLARE(font_awesome_30_4);
 
+// 统一的表情显隐逻辑：仅在聊天态（聆听/说话）显示
+bool LcdDisplay::IsPreviewVisible() const {
+    return preview_image_ && !lv_obj_has_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
+}
+
+bool LcdDisplay::ShouldShowEmojis() const {
+    // 规则：播放器显示/时钟显示/预览显示 任一为真 -> 不显示表情
+    if (IsMusicPlayerVisible()) return false;
+    if (clock_visible_) return false;
+    if (IsPreviewVisible()) return false;
+    // 其他情况（聊天态）允许显示
+    return true;
+}
+
+void LcdDisplay::ApplyEmojiVisibility() {
+    // 锁内做显隐，防止撕裂
+    DisplayLockGuard lock(this);
+    bool should_show = ShouldShowEmojis();
+    if (emoji_box_) {
+        if (should_show) {
+            lv_obj_remove_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
+            if (gif_controller_) gif_controller_->Start();
+        } else {
+            if (gif_controller_) gif_controller_->Stop();
+            lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
 void LcdDisplay::InitializeLcdThemes() {
     auto text_font = std::make_shared<LvglBuiltInFont>(&BUILTIN_TEXT_FONT);
     auto icon_font = std::make_shared<LvglBuiltInFont>(&BUILTIN_ICON_FONT);
@@ -930,12 +959,9 @@ void LcdDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
 
     if (image == nullptr) {
         esp_timer_stop(preview_timer_);
-        lv_obj_remove_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
         preview_image_cached_.reset();
-        if (gif_controller_) {
-            gif_controller_->Start();
-        }
+        ApplyEmojiVisibility();
         return;
     }
 
@@ -948,11 +974,9 @@ void LcdDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
         lv_image_set_scale(preview_image_, 128 * width_ / img_dsc->header.w);
     }
 
-    // Hide emoji_box_
-    if (gif_controller_) {
-        gif_controller_->Stop();
-    }
-    lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
+    // 预览期间隐藏表情
+    if (gif_controller_) gif_controller_->Stop();
+    if (emoji_box_) lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
     esp_timer_stop(preview_timer_);
     ESP_ERROR_CHECK(esp_timer_start_once(preview_timer_, PREVIEW_IMAGE_DURATION_MS * 1000));
@@ -977,6 +1001,10 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
 #endif
 
 void LcdDisplay::SetEmotion(const char* emotion) {
+    // 仅在允许显示表情时响应（聊天态）
+    if (!ShouldShowEmojis()) {
+        return;
+    }
     // Stop any running GIF animation
     if (gif_controller_) {
         DisplayLockGuard lock(this);
@@ -1552,6 +1580,8 @@ void LcdDisplay::ShowMusicPlayer() {
     }
     music_player_ui_->Show();
     EnableTouchVolumeControl(false);  // 禁用触摸音量控制
+    // 播放器界面显示时：统一通过 ApplyEmojiVisibility 控制表情
+    ApplyEmojiVisibility();
 }
 
 void LcdDisplay::HideMusicPlayer() {
@@ -1561,6 +1591,8 @@ void LcdDisplay::HideMusicPlayer() {
         music_player_ui_->Hide();
     }
     EnableTouchVolumeControl(true);  // 恢复触摸音量控制
+    // 退出播放器后根据状态统一处理表情
+    ApplyEmojiVisibility();
 }
 
 void LcdDisplay::UpdateMusicProgress(float progress) {
@@ -1644,6 +1676,8 @@ void LcdDisplay::ShowClockFace() {
     if (!clock_visible_) {
         clock_face_show(pixel_thinking_clock_);
         clock_visible_ = true;
+        // 统一通过 ApplyEmojiVisibility 控制表情
+        ApplyEmojiVisibility();
         EnableTouchVolumeControl(false);
         // 隐藏聊天与表情层，避免遮挡
         if (emoji_box_) lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
@@ -1662,10 +1696,9 @@ void LcdDisplay::HideClockFace() {
     EnableTouchVolumeControl(true);
     // 退出时钟界面时恢复状态栏
     if (status_bar_) lv_obj_remove_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);
-    // 恢复聊天界面的表情可见性
-    if (emoji_box_) lv_obj_remove_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
-    // 若需要，恢复为默认表情，确保立刻有内容
-    SetEmotion("neutral");
+    // 根据状态统一处理表情
+    ApplyEmojiVisibility();
+    // 不主动切换表情，遵循显隐规则
 }
 
 void LcdDisplay::UpdateStatusBar(bool update_all) {
@@ -1713,6 +1746,8 @@ void LcdDisplay::ApplyUIMode(UIMode mode) {
             // 表情/聊天显示由现有逻辑维持
             break;
     }
+    // 模式应用后，统一处理一次表情显隐，避免竞态
+    ApplyEmojiVisibility();
 }
 
 void LcdDisplay::UpdateMusicTime(const char* current_time, const char* duration) {

@@ -93,6 +93,11 @@ public:
     void OnStateMaybeChanged();
     void ApplyUIMode(UIMode mode);
 
+    // 统一管理表情显隐
+    void ApplyEmojiVisibility();
+    bool ShouldShowEmojis() const;
+    bool IsPreviewVisible() const;
+
     // Add theme switching function
     virtual void SetTheme(Theme* theme) override;
 

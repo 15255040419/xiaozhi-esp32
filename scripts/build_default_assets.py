@@ -249,32 +249,45 @@ def process_emoji_collection(emoji_collection_dir, assets_dir):
 
 
 def process_extra_files(extra_files_dir, assets_dir):
-    """Process default_assets_extra_files parameter"""
+    """Process default_assets_extra_files parameter
+    - Preserve relative path information by encoding it into the output filename.
+      Example: clock_faces/xiangsu/number/0.png -> clock_faces_xiangsu_number_0.png
+    - Also copy sibling clock_faces.json if present (assets/clock_faces.json).
+    """
     if not extra_files_dir:
         return []
-    
+
     if not os.path.exists(extra_files_dir):
         print(f"Warning: Extra files directory not found: {extra_files_dir}")
         return []
-    
+
     extra_files_list = []
-    
-    # Copy each file from input directory to build/assets directory
+
+    # Copy each file from input directory to build/assets directory with encoded names
     for root, dirs, files in os.walk(extra_files_dir):
         for file in files:
             # Skip hidden files and directories
             if file.startswith('.'):
                 continue
-                
-            # Copy file
+
             src_file = os.path.join(root, file)
-            dst_file = os.path.join(assets_dir, file)
+            # Encode relative path into a flat filename to avoid collisions
+            rel_path = os.path.relpath(src_file, extra_files_dir).replace('\\', '/')
+            encoded_name = 'clock_faces_' + rel_path.replace('/', '_')
+            dst_file = os.path.join(assets_dir, encoded_name)
             if copy_file(src_file, dst_file):
-                extra_files_list.append(file)
-    
+                extra_files_list.append(encoded_name)
+
+    # Additionally include top-level clock_faces.json if it exists next to the directory
+    sibling_json = os.path.join(os.path.dirname(extra_files_dir), 'clock_faces.json')
+    if os.path.exists(sibling_json):
+        dst_json = os.path.join(assets_dir, 'clock_faces.json')
+        if copy_file(sibling_json, dst_json):
+            extra_files_list.append('clock_faces.json')
+
     if extra_files_list:
         print(f"Processed {len(extra_files_list)} extra files from: {extra_files_dir}")
-    
+
     return extra_files_list
 
 
@@ -316,7 +329,7 @@ def generate_config_json(build_dir, assets_dir):
         "lvgl_ver": "9.3.0",
         "assets_size": "0x400000",
         "support_format": ".png, .gif, .jpg, .bin, .json",
-        "name_length": "32",
+        "name_length": "96",
         "split_height": "0",
         "support_qoi": False,
         "support_spng": False,

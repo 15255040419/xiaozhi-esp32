@@ -15,7 +15,7 @@
 #define TAG "Assets"
 
 struct mmap_assets_table {
-    char asset_name[32];          /*!< Name of the asset */
+    char asset_name[96];          /*!< Name of the asset (match packer name_length) */
     uint32_t asset_size;          /*!< Size of the asset */
     uint32_t asset_offset;        /*!< Offset of the asset */
     uint16_t asset_width;         /*!< Width of the asset */
@@ -575,16 +575,43 @@ std::vector<std::string> Assets::ListClockFaces() const {
         }
     }
 
-    // 2) 回退：从资产键名中提取 clock_faces/<name>/ 前缀（若未被截断）
+    // 2) 回退：从资产键名中提取主题名
+    //    兼容两种命名：
+    //    a) 原始路径：clock_faces/<name>/...
+    //    b) 扁平化下划线：clock_faces_<name>_...
     std::set<std::string> names;
     for (const auto& kv : assets_) {
         std::string norm = kv.first;
         for (auto &ch : norm) if (ch == '\\') ch = '/';
-        const std::string prefix = "clock_faces/";
-        if (norm.rfind(prefix, 0) != 0) continue;
-        size_t p2 = norm.find('/', prefix.size());
-        if (p2 == std::string::npos) continue;
-        names.insert(norm.substr(prefix.size(), p2 - prefix.size()));
+
+        // a) 目录形式
+        {
+            const std::string prefix = "clock_faces/";
+            if (norm.rfind(prefix, 0) == 0) {
+                size_t p2 = norm.find('/', prefix.size());
+                if (p2 != std::string::npos) {
+                    names.insert(norm.substr(prefix.size(), p2 - prefix.size()));
+                    continue;
+                }
+            }
+        }
+
+        // b) 下划线扁平化形式
+        {
+            const std::string us_prefix = "clock_faces_";
+            if (norm.rfind(us_prefix, 0) == 0) {
+                // 忽略以 .json 结尾的资产（例如被扁平化的 clock_faces/clock_faces.json），
+                // 以免将 "clock" 误识别为主题名
+                if (norm.size() >= 5 && norm.rfind(".json") == norm.size() - 5) {
+                    continue;
+                }
+                size_t p2 = norm.find('_', us_prefix.size());
+                if (p2 != std::string::npos) {
+                    names.insert(norm.substr(us_prefix.size(), p2 - us_prefix.size()));
+                    continue;
+                }
+            }
+        }
     }
     return std::vector<std::string>(names.begin(), names.end());
 }

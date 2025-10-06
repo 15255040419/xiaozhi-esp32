@@ -1,0 +1,11 @@
+{
+    "name": "big",
+    "use_gif_background": "no",
+    "background_loop": "infinite",
+    "pos_clock_hour_a" : [-56, -74],
+    "pos_clock_hour_b" : [73, -74],
+    "pos_clock_colon" : [0, 0],
+    "pos_clock_min_a" : [-3, 98],
+    "pos_clock_min_b" : [126, 98]
+}
+
