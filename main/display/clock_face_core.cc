@@ -10,6 +10,7 @@
 #include "display/lvgl_display/lvgl_image.h"
 #include "display/lvgl_display/gif/lvgl_gif.h"
 #include "settings.h"
+#include "board.h"
 
 // PixelThinking 风格的时钟界面（核心实现，C 接口见底部）
 
@@ -49,6 +50,8 @@ public:
             lv_obj_move_foreground(container_);
         }
         g_clock_face_active = true;
+        // 提升 LVGL image cache，减小首次加载抖动
+        lv_image_cache_resize(2 * 1024 * 1024, true);
         // 同时支持两种模式：
         // 1) face.json 提供 4 个坐标 -> 使用绝对定位（隐藏 flex 容器）
         // 2) 未提供 -> 使用原来的水平 FLEX 布局
@@ -92,9 +95,32 @@ public:
     void Hide() {
         StopTick();
         if (gif_) gif_->Pause();
-        if (container_) {
-            lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN);
+        // 背景资源释放与缓存清理
+        if (background_img_) {
+            const void* src = lv_image_get_src(background_img_);
+            if (src) lv_image_cache_drop(src);
+            lv_image_set_src(background_img_, NULL);
         }
+        if (gif_) { gif_->Stop(); }
+        gif_.reset();
+        background_image_.reset();
+        // 数字与冒号图释放
+        for (int i = 0; i < 5; ++i) {
+            if (digit_img_[i]) {
+                const void* s = lv_image_get_src(digit_img_[i]);
+                if (s) lv_image_cache_drop(s);
+                lv_image_set_src(digit_img_[i], NULL);
+            }
+        }
+        for (auto &img : digit_images_) img.reset();
+        colon_image_.reset();
+        // 降低 image cache，释放缓存
+        lv_image_cache_resize(512 * 1024, true);
+        // 标记状态
+        digits_loaded_ = false;
+        background_loaded_ = false;
+        face_loaded_ = false;
+        if (container_) lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN);
         g_clock_face_active = false;
     }
 
@@ -369,6 +395,12 @@ private:
             auto self = static_cast<ClockFacePixelThinkingCore*>(lv_event_get_user_data(e));
             if (!self) return;
             lv_event_code_t code = lv_event_get_code(e);
+            // 全局触摸唤醒：在时钟界面内也直接唤醒
+            if (code == LV_EVENT_PRESSED || code == LV_EVENT_PRESSING ||
+                code == LV_EVENT_RELEASED || code == LV_EVENT_LONG_PRESSED ||
+                code == LV_EVENT_LONG_PRESSED_REPEAT || code == LV_EVENT_CLICKED) {
+                Board::GetInstance().SetPowerSaveMode(false);
+            }
             // 在切换模式中，不拦截触摸；维护 touch_active_ 并重置无触摸计时
             if (self->switch_mode_) {
                 if (code == LV_EVENT_PRESSED || code == LV_EVENT_PRESSING ||
@@ -448,36 +480,14 @@ private:
 
     void EnsureDigitsLoaded() {
         if (digits_loaded_) return;
-        if (use_text_time_) { // 文本时间模式：不加载数字图片，避免告警
+        if (use_text_time_) { // 文本时间模式：不加载数字图片
             digits_loaded_ = true;
             return;
         }
-        // 期望资源路径：clock_faces/<face>/number/0.png ... 9.png
-        bool all_loaded = true;
-        for (int d = 0; d <= 9; ++d) {
-            if (!LoadImageTo(digit_images_[d], MakeNumberPath(d))) {
-                ESP_LOGW(TAG, "Failed to load digit %d", d);
-                all_loaded = false;
-            }
+        // 懒加载：尝试加载冒号（若主题提供了 number/colon.png 则会成功）
+        if (!colon_image_ || !colon_image_->image_dsc()) {
+            (void)LoadImageTo(colon_image_, MakeColonPath()); // optional
         }
-        // 仅 green 尝试加载冒号 PNG
-        if (active_face_name_ == "green") {
-            if (!LoadImageTo(colon_image_, MakeColonPath())) {
-                // optional
-            }
-        }
-        if (all_loaded) {
-            // 记录一个数字的尺寸（假设同一主题数字尺寸一致）
-            const lv_image_dsc_t* d = digit_images_[0] ? digit_images_[0]->image_dsc() : nullptr;
-            if (d) {
-                ESP_LOGI(TAG, "All digit images loaded successfully, digit size=%dx%d cf=%d", (int)d->header.w, (int)d->header.h, (int)d->header.cf);
-            } else {
-                ESP_LOGI(TAG, "All digit images loaded successfully");
-            }
-        } else {
-            ESP_LOGW(TAG, "Some digit images failed to load, font fallback may be used");
-        }
-        // 加载完成（冒号按需加载，仅 green）
         digits_loaded_ = true;
     }
 
@@ -525,8 +535,22 @@ private:
         int d2 = m / 10;
         int d3 = m % 10;
 
+        // 懒加载：先确保当前4个数字贴图可用
+        {
+            int need[4] = { d0, d1, d2, d3 };
+            for (int i = 0; i < 4; ++i) {
+                int d = need[i];
+                if (!digit_images_[d]) {
+                    (void)LoadImageTo(digit_images_[d], MakeNumberPath(d));
+                }
+            }
+        }
         // 检查4位数字是否都可用（不需要冒号）
-        bool digits_ok = digit_images_[d0] && digit_images_[d1] && digit_images_[d2] && digit_images_[d3];
+        bool digits_ok =
+            digit_images_[d0] && digit_images_[d0]->image_dsc() &&
+            digit_images_[d1] && digit_images_[d1]->image_dsc() &&
+            digit_images_[d2] && digit_images_[d2]->image_dsc() &&
+            digit_images_[d3] && digit_images_[d3]->image_dsc();
         if (digits_ok && !use_text_time_) {
             // 图片渲染：仅显示4位数字，不显示冒号
             SetDigit(0, d0);
@@ -537,8 +561,8 @@ private:
             for (int i = 0; i < 4; ++i) {
                 if (digit_img_[i]) lv_obj_clear_flag(digit_img_[i], LV_OBJ_FLAG_HIDDEN);
             }
-            // green: 显示冒号 PNG（若已加载）；其他主题隐藏
-            if (active_face_name_ == "green" && colon_image_ && colon_image_->image_dsc()) {
+            // 如主题提供了冒号资源，则显示；否则隐藏
+            if (colon_image_ && colon_image_->image_dsc()) {
                 SetColon(4);
                 lv_obj_clear_flag(digit_img_[4], LV_OBJ_FLAG_HIDDEN);
                 if (use_absolute_positions_) {
@@ -557,8 +581,8 @@ private:
             if (time_text_) {
                 lv_obj_add_flag(time_text_, LV_OBJ_FLAG_HIDDEN);
             }
-            // green 主题：显示日期（默认字体），位于时间数字下方
-            if (active_face_name_ == "green") UpdateAndShowDate(tm_info, /*is_digits_mode=*/true); else { if (date_text_) lv_obj_add_flag(date_text_, LV_OBJ_FLAG_HIDDEN); if (date_line_) lv_obj_add_flag(date_line_, LV_OBJ_FLAG_HIDDEN); }
+            // flower 主题：显示日期（默认字体），位于时间数字下方
+            if (active_face_name_ == "flower") UpdateAndShowDate(tm_info, /*is_digits_mode=*/true); else { if (date_text_) lv_obj_add_flag(date_text_, LV_OBJ_FLAG_HIDDEN); if (date_line_) lv_obj_add_flag(date_line_, LV_OBJ_FLAG_HIDDEN); }
         } else {
             // 降级到字体渲染，确保不空白
             char buf[8];
@@ -575,8 +599,8 @@ private:
             lv_obj_align(time_text_, LV_ALIGN_CENTER, 0, time_y_offset_);
             lv_label_set_text(time_text_, buf);
             lv_obj_clear_flag(time_text_, LV_OBJ_FLAG_HIDDEN);
-            // 日期标签：仅 green 主题显示；位于时间下方
-            if (active_face_name_ == "green") UpdateAndShowDate(tm_info, /*is_digits_mode=*/false); else { if (date_text_) lv_obj_add_flag(date_text_, LV_OBJ_FLAG_HIDDEN); if (date_line_) lv_obj_add_flag(date_line_, LV_OBJ_FLAG_HIDDEN); }
+            // 日期标签：仅 flower 主题显示；位于时间下方
+            if (active_face_name_ == "flower") UpdateAndShowDate(tm_info, /*is_digits_mode=*/false); else { if (date_text_) lv_obj_add_flag(date_text_, LV_OBJ_FLAG_HIDDEN); if (date_line_) lv_obj_add_flag(date_line_, LV_OBJ_FLAG_HIDDEN); }
             // 隐藏图片层以避免覆盖
             for (int i = 0; i < 5; ++i) {
                 if (digit_img_[i]) lv_obj_add_flag(digit_img_[i], LV_OBJ_FLAG_HIDDEN);
@@ -584,7 +608,7 @@ private:
         }
     }
 
-    // 统一更新/显示日期（仅 green 调用）
+    // 统一更新/显示日期（仅 flower 调用）
     void UpdateAndShowDate(const struct tm* tm_info, bool is_digits_mode) {
         if (!date_text_) {
             date_text_ = lv_label_create(container_);
@@ -609,20 +633,23 @@ private:
             if (use_absolute_positions_) {
                 int bottom_y = pos_[0][1];
                 for (int i = 1; i < 4; ++i) bottom_y = bottom_y > pos_[i][1] ? bottom_y : pos_[i][1];
-                lv_obj_align(date_text_, LV_ALIGN_CENTER, 0, bottom_y + date_gap_ + 36);
+                lv_obj_align(date_text_, LV_ALIGN_CENTER, 0, bottom_y + date_gap_ + 42);
             } else if (time_container_) {
-                lv_obj_align_to(date_text_, time_container_, LV_ALIGN_OUT_BOTTOM_MID, 0, date_gap_ + 36);
+                lv_obj_align_to(date_text_, time_container_, LV_ALIGN_OUT_BOTTOM_MID, 0, date_gap_ + 42);
             } else {
-                lv_obj_align(date_text_, LV_ALIGN_CENTER, 0, date_gap_ + 36);
+                lv_obj_align(date_text_, LV_ALIGN_CENTER, 0, date_gap_ + 42);
             }
         } else {
             // 文本时间：跟随 time_text_
-            if (time_text_) lv_obj_align_to(date_text_, time_text_, LV_ALIGN_OUT_BOTTOM_MID, 0, date_gap_ + 36);
-            else lv_obj_align(date_text_, LV_ALIGN_CENTER, 0, date_gap_ + 36);
+            if (time_text_) lv_obj_align_to(date_text_, time_text_, LV_ALIGN_OUT_BOTTOM_MID, 0, date_gap_ + 42);
+            else lv_obj_align(date_text_, LV_ALIGN_CENTER, 0, date_gap_ + 42);
         }
-        // 设置细线长度略长于日期文本
+        // 在读取宽度之前强制布局，确保首次显示获得正确宽度
+        lv_obj_update_layout(date_text_);
+        // 设置细线长度略长于日期文本（考虑缩放）
         lv_coord_t wtxt = lv_obj_get_width(date_text_);
-        lv_coord_t line_w = wtxt + 30; // 日期文本宽度 + 30 像素
+        lv_coord_t wtxt_scaled = (wtxt * date_zoom_) / 256; // date_zoom_: 256=1.0x
+        lv_coord_t line_w = wtxt_scaled + 30; // 日期文本宽度 + 30 像素
         if (line_w < 30) line_w = 30;
         lv_obj_set_width(date_line_, line_w);
         // 细线放在日期正上方，间隔 4px
@@ -640,13 +667,12 @@ private:
     void SetDigit(int pos, int d) {
         if (pos < 0 || pos >= 5 || d < 0 || d > 9) return;
         if (!digit_img_[pos]) return;  // 确保 UI 对象存在
+        // 懒加载：需要时加载对应数字
         if (!digit_images_[d]) {
-            ESP_LOGW(TAG, "Digit image %d not loaded, hiding position %d", d, pos);
-            lv_obj_add_flag(digit_img_[pos], LV_OBJ_FLAG_HIDDEN);
-            return;
+            (void)LoadImageTo(digit_images_[d], MakeNumberPath(d));
         }
-        if (!digit_images_[d]->image_dsc()) {
-            ESP_LOGW(TAG, "Digit image %d has invalid descriptor", d);
+        if (!digit_images_[d] || !digit_images_[d]->image_dsc()) {
+            ESP_LOGW(TAG, "Digit %d image not ready; hide pos %d", d, pos);
             lv_obj_add_flag(digit_img_[pos], LV_OBJ_FLAG_HIDDEN);
             return;
         }
@@ -828,6 +854,8 @@ private:
             face_loaded_ = false; background_loaded_ = false; gif_.reset(); background_image_.reset();
             digits_loaded_ = false;
             for (auto &img : digit_images_) img.reset();
+            // 重置冒号资源，避免跨主题复用
+            colon_image_.reset();
             // 丢弃图像缓存以避免跨主题重用
             lv_image_cache_drop(lv_image_get_src(background_img_));
             for (int i = 0; i < 5; ++i) {

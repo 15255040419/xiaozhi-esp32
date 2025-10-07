@@ -7,7 +7,8 @@
 #include "i2c_device.h"
 #include "axp2101.h"
 #include "power_save_timer.h"
-#include "lichuang_camera.h"
+#include "esp32_camera.h"
+// #include "lichuang_camera.h" // no longer needed when using default Esp32Camera
 
 #include <esp_log.h>
 #include <esp_lcd_panel_vendor.h>
@@ -465,10 +466,18 @@ private:
         config.fb_location = CAMERA_FB_IN_PSRAM;
         config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
 
-        camera_ = new LichuangDevPlusCamera(config);
+        camera_ = new Esp32Camera(config);
         if (!camera_) { 
             ESP_LOGE(TAG, "Camera initialization failed!"); 
             return;
+        }
+        // Enable vertical flip after camera init
+        sensor_t* s = esp_camera_sensor_get();
+        if (s) {
+            s->set_vflip(s, 1);
+            ESP_LOGI(TAG, "Vertical flip enabled for camera sensor");
+        } else {
+            ESP_LOGW(TAG, "Failed to get camera sensor for vflip");
         }
     }
     
@@ -536,8 +545,8 @@ public:
 
     virtual void SetPowerSaveMode(bool enabled) override {
         if (!enabled) {
-            power_save_timer_->WakeUp();
-        }
+                power_save_timer_->WakeUp();
+            }
         DualNetworkBoard::SetPowerSaveMode(enabled);
     }
 };

@@ -509,9 +509,6 @@ void MusicPlayerUI::SetVolume(int volume) {
 void MusicPlayerUI::PlayPauseEventCb(lv_event_t* e) {
     MusicPlayerUI* ui = static_cast<MusicPlayerUI*>(lv_event_get_user_data(e));
     if (ui) {
-        // 唤醒电源管理系统
-        Board::GetInstance().SetPowerSaveMode(false);
-        
         if (ui->play_pause_callback_) {
             ui->play_pause_callback_(ui->play_pause_user_data_);
         }
@@ -521,9 +518,6 @@ void MusicPlayerUI::PlayPauseEventCb(lv_event_t* e) {
 void MusicPlayerUI::PreviousEventCb(lv_event_t* e) {
     MusicPlayerUI* ui = static_cast<MusicPlayerUI*>(lv_event_get_user_data(e));
     if (ui) {
-        // 唤醒电源管理系统
-        Board::GetInstance().SetPowerSaveMode(false);
-        
         if (ui->previous_callback_) {
             ui->previous_callback_(ui->previous_user_data_);
         }
@@ -533,9 +527,6 @@ void MusicPlayerUI::PreviousEventCb(lv_event_t* e) {
 void MusicPlayerUI::NextEventCb(lv_event_t* e) {
     MusicPlayerUI* ui = static_cast<MusicPlayerUI*>(lv_event_get_user_data(e));
     if (ui) {
-        // 唤醒电源管理系统
-        Board::GetInstance().SetPowerSaveMode(false);
-        
         if (ui->next_callback_) {
             ui->next_callback_(ui->next_user_data_);
         }
@@ -545,9 +536,6 @@ void MusicPlayerUI::NextEventCb(lv_event_t* e) {
 void MusicPlayerUI::ProgressEventCb(lv_event_t* e) {
     MusicPlayerUI* ui = static_cast<MusicPlayerUI*>(lv_event_get_user_data(e));
     if (ui) {
-        // 唤醒电源管理系统
-        Board::GetInstance().SetPowerSaveMode(false);
-        
         if (ui->progress_callback_) {
             lv_obj_t* progress_bar = static_cast<lv_obj_t*>(lv_event_get_target(e));
             lv_point_t point;
@@ -569,9 +557,6 @@ void MusicPlayerUI::ProgressEventCb(lv_event_t* e) {
 void MusicPlayerUI::VolumeEventCb(lv_event_t* e) {
     MusicPlayerUI* ui = static_cast<MusicPlayerUI*>(lv_event_get_user_data(e));
     if (ui) {
-        // 唤醒电源管理系统
-        Board::GetInstance().SetPowerSaveMode(false);
-        
         if (ui->volume_callback_) {
             lv_obj_t* slider = static_cast<lv_obj_t*>(lv_event_get_target(e));
             int volume = lv_slider_get_value(slider);

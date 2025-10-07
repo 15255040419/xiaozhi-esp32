@@ -1,10 +1,10 @@
 {
-    "name": "green",
+    "name": "flower",
     "use_gif_background": "yes",
     "background_loop": "once",
     "pos_clock_hour_a": [-60, -10],
     "pos_clock_hour_b": [-30, -10],
     "pos_clock_colon":  [0, -10],
-    "pos_clock_min_a":  [ 40, -10],
-    "pos_clock_min_b":  [ 70, -10]
+    "pos_clock_min_a":  [ 30, -10],
+    "pos_clock_min_b":  [ 60, -10]
   }

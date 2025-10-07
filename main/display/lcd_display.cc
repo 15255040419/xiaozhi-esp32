@@ -403,6 +403,13 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_font(screen, text_font, 0);
     lv_obj_set_style_text_color(screen, lvgl_theme->text_color(), 0);
     lv_obj_set_style_bg_color(screen, lvgl_theme->background_color(), 0);
+    // 全局触摸唤醒：在屏幕层监听触摸事件，任何界面触摸都唤醒
+    lv_obj_add_event_cb(screen, [](lv_event_t* e){
+        lv_event_code_t code = lv_event_get_code(e);
+        if (code == LV_EVENT_PRESSED || code == LV_EVENT_PRESSING || code == LV_EVENT_RELEASED) {
+            Board::GetInstance().SetPowerSaveMode(false);
+        }
+    }, LV_EVENT_ALL, nullptr);
 
     /* Container */
     container_ = lv_obj_create(screen);
@@ -414,6 +421,7 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_pad_row(container_, 0, 0);
     lv_obj_set_style_bg_color(container_, lvgl_theme->background_color(), 0);
     lv_obj_set_style_border_color(container_, lvgl_theme->border_color(), 0);
+    lv_obj_add_flag(container_, LV_OBJ_FLAG_EVENT_BUBBLE);
 
     /* Status bar */
     status_bar_ = lv_obj_create(container_);
@@ -421,6 +429,7 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_radius(status_bar_, 0, 0);
     lv_obj_set_style_bg_opa(status_bar_, LV_OPA_TRANSP, 0);  // 全透明，让播放器背景透过来
     lv_obj_set_style_text_color(status_bar_, lvgl_theme->text_color(), 0);
+    lv_obj_add_flag(status_bar_, LV_OBJ_FLAG_EVENT_BUBBLE);
     
     /* Content - Chat area */
     content_ = lv_obj_create(container_);
@@ -430,6 +439,7 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_pad_all(content_, lvgl_theme->spacing(4), 0);
     lv_obj_set_style_border_width(content_, 0, 0);
     lv_obj_set_style_bg_color(content_, lvgl_theme->chat_background_color(), 0); // Background for chat area
+    lv_obj_add_flag(content_, LV_OBJ_FLAG_EVENT_BUBBLE);
 
     // Enable scrolling for chat content
     lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
@@ -500,6 +510,7 @@ void LcdDisplay::SetupUI() {
 
     emoji_image_ = lv_img_create(screen);
     lv_obj_align(emoji_image_, LV_ALIGN_TOP_MID, 0, text_font->line_height + lvgl_theme->spacing(8));
+    lv_obj_add_flag(emoji_image_, LV_OBJ_FLAG_EVENT_BUBBLE);
 
     // Display AI logo while booting
     emoji_label_ = lv_label_create(screen);
@@ -507,6 +518,7 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_font(emoji_label_, large_icon_font, 0);
     lv_obj_set_style_text_color(emoji_label_, lvgl_theme->text_color(), 0);
     lv_label_set_text(emoji_label_, FONT_AWESOME_MICROCHIP_AI);
+    lv_obj_add_flag(emoji_label_, LV_OBJ_FLAG_EVENT_BUBBLE);
 }
 #if CONFIG_IDF_TARGET_ESP32P4
 #define  MAX_MESSAGES 40
@@ -959,7 +971,13 @@ void LcdDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
 
     if (image == nullptr) {
         esp_timer_stop(preview_timer_);
-        lv_obj_add_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
+        // 清理 LVGL 源与缓存，确保完全释放
+        if (preview_image_) {
+            const void* src = lv_image_get_src(preview_image_);
+            if (src) lv_image_cache_drop(src);
+            lv_image_set_src(preview_image_, NULL);
+            lv_obj_add_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
+        }
         preview_image_cached_.reset();
         ApplyEmojiVisibility();
         return;
@@ -1589,6 +1607,9 @@ void LcdDisplay::HideMusicPlayer() {
     
     if (music_player_ui_) {
         music_player_ui_->Hide();
+        StopMusicProgressUpdate();
+        // 退出时销毁 UI 以释放内存
+        music_player_ui_.reset();
     }
     EnableTouchVolumeControl(true);  // 恢复触摸音量控制
     // 退出播放器后根据状态统一处理表情

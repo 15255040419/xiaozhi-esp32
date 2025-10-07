@@ -551,6 +551,15 @@ bool Esp32Music::StartStreaming(const std::string& music_url) {
     }
     
     ESP_LOGD(TAG, "Starting streaming for URL: %s", music_url.c_str());
+    // 在启动播放前，停用语音处理与唤醒词，避免 AFE 环路缓冲堆积
+    {
+        auto& app = Application::GetInstance();
+        auto& audio_service = app.GetAudioService();
+        // 仅停止语音处理链路（VAD/ASR），保留唤醒词运行以支持语音打断
+        audio_service.EnableVoiceProcessing(false);
+        // 等待一小段时间让相关任务稳定
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
     
     // 停止之前的播放和下载
     is_downloading_ = false;
@@ -675,6 +684,14 @@ bool Esp32Music::StopStreaming() {
     last_frame_time_ms_ = 0;
     
     ESP_LOGI(TAG, "Music streaming completely stopped and cleaned up");
+    // 若设备处于空闲态，恢复唤醒词检测
+    {
+        auto& app = Application::GetInstance();
+        if (app.GetDeviceState() == kDeviceStateIdle) {
+            auto& audio_service = app.GetAudioService();
+            audio_service.EnableWakeWordDetection(true);
+        }
+    }
     return true;
 }
 
