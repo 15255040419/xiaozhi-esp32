@@ -26,10 +26,10 @@ public:
     bool Download(std::string url, std::function<void(int progress, size_t speed)> progress_callback);
     bool Apply();
     bool GetAssetData(const std::string& name, void*& ptr, size_t& size);
+    // 读取 SD 卡文件（如果已挂载），返回是否成功
+    static bool ReadFileFromSd(const char* path, std::string& out);
     // 列出以某个前缀开头的资产路径（用于枚举时钟主题）
     std::vector<std::string> ListAssetsWithPrefix(const std::string& prefix) const;
-    // 列出 clock_faces 目录下的主题名（去重）
-    std::vector<std::string> ListClockFaces() const;
 
     inline bool partition_valid() const { return partition_valid_; }
     inline bool checksum_valid() const { return checksum_valid_; }

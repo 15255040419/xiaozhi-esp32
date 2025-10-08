@@ -10,6 +10,8 @@
 #include <esp_timer.h>
 #include <cbin_font.h>
 #include <set>
+#include <dirent.h>
+#include <ctype.h>
 
 
 #define TAG "Assets"
@@ -517,6 +519,19 @@ bool Assets::GetAssetData(const std::string& name, void*& ptr, size_t& size) {
     return true;
 }
 
+bool Assets::ReadFileFromSd(const char* path, std::string& out) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return false;
+    fseek(f, 0, SEEK_END);
+    long len = ftell(f);
+    if (len <= 0) { fclose(f); return false; }
+    fseek(f, 0, SEEK_SET);
+    out.resize(static_cast<size_t>(len));
+    size_t n = fread(out.data(), 1, out.size(), f);
+    fclose(f);
+    return n == out.size();
+}
+
 std::vector<std::string> Assets::ListAssetsWithPrefix(const std::string& prefix) const {
     std::vector<std::string> out;
     for (const auto& kv : assets_) {
@@ -525,93 +540,4 @@ std::vector<std::string> Assets::ListAssetsWithPrefix(const std::string& prefix)
         }
     }
     return out;
-}
-
-std::vector<std::string> Assets::ListClockFaces() const {
-    // 1) 优先读取清单文件（避免资产名被截断导致路径丢失）
-    {
-        void* ptr = nullptr; size_t size = 0;
-        // 依次尝试多种可能位置/文件名（尽量短，降低被截断概率）
-        auto parse_faces = [&](void* p, size_t s) -> std::vector<std::string> {
-            std::vector<std::string> faces;
-            cJSON* root = cJSON_ParseWithLength(static_cast<char*>(p), s);
-            if (root) {
-                if (cJSON_IsArray(root)) {
-                    int n = cJSON_GetArraySize(root);
-                    for (int i = 0; i < n; ++i) {
-                        cJSON* item = cJSON_GetArrayItem(root, i);
-                        if (cJSON_IsString(item)) faces.emplace_back(item->valuestring);
-                    }
-                } else if (cJSON_IsObject(root)) {
-                    cJSON* arr = cJSON_GetObjectItem(root, "faces");
-                    if (cJSON_IsArray(arr)) {
-                        int n = cJSON_GetArraySize(arr);
-                        for (int i = 0; i < n; ++i) {
-                            cJSON* item = cJSON_GetArrayItem(arr, i);
-                            if (cJSON_IsString(item)) faces.emplace_back(item->valuestring);
-                        }
-                    }
-                }
-                cJSON_Delete(root);
-            }
-            return faces;
-        };
-
-        std::vector<std::string> result;
-        auto try_file = [&](const char* name, std::vector<std::string>& out) -> bool {
-            if (const_cast<Assets*>(this)->GetAssetData(name, ptr, size)) {
-                auto faces = parse_faces(ptr, size);
-                if (!faces.empty()) {
-                    out.swap(faces);
-                    return true;
-                }
-            }
-            return false;
-        };
-        if (try_file("clock_faces.json", result) ||
-            try_file("clock_faces/clock_faces.json", result) ||
-            try_file("clock_faces/index.json", result)) {
-            return result;
-        }
-    }
-
-    // 2) 回退：从资产键名中提取主题名
-    //    兼容两种命名：
-    //    a) 原始路径：clock_faces/<name>/...
-    //    b) 扁平化下划线：clock_faces_<name>_...
-    std::set<std::string> names;
-    for (const auto& kv : assets_) {
-        std::string norm = kv.first;
-        for (auto &ch : norm) if (ch == '\\') ch = '/';
-
-        // a) 目录形式
-        {
-            const std::string prefix = "clock_faces/";
-            if (norm.rfind(prefix, 0) == 0) {
-                size_t p2 = norm.find('/', prefix.size());
-                if (p2 != std::string::npos) {
-                    names.insert(norm.substr(prefix.size(), p2 - prefix.size()));
-                    continue;
-                }
-            }
-        }
-
-        // b) 下划线扁平化形式
-        {
-            const std::string us_prefix = "clock_faces_";
-            if (norm.rfind(us_prefix, 0) == 0) {
-                // 忽略以 .json 结尾的资产（例如被扁平化的 clock_faces/clock_faces.json），
-                // 以免将 "clock" 误识别为主题名
-                if (norm.size() >= 5 && norm.rfind(".json") == norm.size() - 5) {
-                    continue;
-                }
-                size_t p2 = norm.find('_', us_prefix.size());
-                if (p2 != std::string::npos) {
-                    names.insert(norm.substr(us_prefix.size(), p2 - us_prefix.size()));
-                    continue;
-                }
-            }
-        }
-    }
-    return std::vector<std::string>(names.begin(), names.end());
 }

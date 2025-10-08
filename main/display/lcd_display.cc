@@ -1754,6 +1754,21 @@ void LcdDisplay::ApplyUIMode(UIMode mode) {
     switch (mode) {
         case UIMode::Clock:
             HideMusicPlayer();
+            // WiFi 未连接时先不显示时钟界面，待联网成功回调再显示
+            {
+                auto& app = Application::GetInstance(); (void)app;
+                // 仅在 WiFi 板时判断连接状态
+                if (Board::GetInstance().GetBoardType() == std::string("wifi") ||
+                    Board::GetInstance().GetBoardType() == std::string("dual")) {
+                    // 使用弱依赖接口：通过网络图标状态判定是否连上（避免直接包含第三方头）
+                    auto icon = Board::GetInstance().GetNetworkStateIcon();
+                    // 未连接通常返回 WIFI_SLASH 图标，连接后为 WIFI/Fair/Weak 等
+                    if (icon && std::string(icon) == std::string(FONT_AWESOME_WIFI_SLASH)) {
+                        ESP_LOGI(TAG, "Defer ShowClockFace until network connected");
+                        break;
+                    }
+                }
+            }
             ShowClockFace();
             break;
         case UIMode::Music:

@@ -45,6 +45,11 @@
 #define DISPLAY_BACKLIGHT_PIN GPIO_NUM_NC
 #define DISPLAY_BACKLIGHT_OUTPUT_INVERT false
 
+/* TF/SD 卡 (1-bit SDMMC 模式) 引脚 - 按你提供的原理图命名 */
+#define SDMMC_CLK_GPIO   GPIO_NUM_47
+#define SDMMC_CMD_GPIO   GPIO_NUM_48
+#define SDMMC_D0_GPIO    GPIO_NUM_21
+
 /* Camera pins */
 #define CAMERA_PIN_PWDN -1
 #define CAMERA_PIN_RESET -1

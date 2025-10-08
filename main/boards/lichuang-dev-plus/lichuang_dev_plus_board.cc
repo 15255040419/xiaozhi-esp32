@@ -7,6 +7,7 @@
 #include "i2c_device.h"
 #include "axp2101.h"
 #include "power_save_timer.h"
+#include "sdcard.h"
 #include "esp32_camera.h"
 // #include "lichuang_camera.h" // no longer needed when using default Esp32Camera
 
@@ -172,6 +173,7 @@ private:
     lv_obj_t* volume_bar_obj_ = nullptr;
     Esp32Camera* camera_;
     PowerSaveTimer* power_save_timer_;
+    SdCard sdcard_;
 
     void InitializePowerSaveTimer() {
         power_save_timer_ = new PowerSaveTimer(-1, 60, 300);
@@ -435,6 +437,16 @@ private:
         });
     }
 
+    void InitializeSdCard() {
+        // 1-bit SDMMC: CLK/CMD/D0 引脚见 config.h
+        esp_err_t err = sdcard_.Mount1Bit(SDMMC_CLK_GPIO, SDMMC_CMD_GPIO, SDMMC_D0_GPIO, "/sdcard");
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "SD card ready at %s", sdcard_.mount_point().c_str());
+        } else {
+            ESP_LOGW(TAG, "SD card not mounted: %s", esp_err_to_name(err));
+        }
+    }
+
     void InitializeCamera() {
         // Open camera power
         aw9523b_->SetOutputState(2, 0);
@@ -493,6 +505,7 @@ public:
         InitializeButtons();
         InitializeTouch();
         InitializeCamera();
+        InitializeSdCard();
     }
 
     virtual AudioCodec* GetAudioCodec() override {
