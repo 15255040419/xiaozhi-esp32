@@ -94,6 +94,13 @@ void MusicPlayerUI::CreateUI() {
     container_ = lv_obj_create(parent_);
     lv_obj_set_size(container_, width_, height_);
     lv_obj_set_pos(container_, 0, 0);
+    // 任何触摸唤醒屏幕（播放器界面内）
+    lv_obj_add_flag(container_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(container_, [](lv_event_t* e){
+        if (lv_event_get_code(e) == LV_EVENT_PRESSED) {
+            Board::GetInstance().SetPowerSaveMode(false);
+        }
+    }, LV_EVENT_ALL, nullptr);
     
     // 设置毛玻璃效果背景
     lv_obj_set_style_bg_opa(container_, LV_OPA_30, 0);
@@ -113,6 +120,7 @@ void MusicPlayerUI::CreateUI() {
     
     // 1. 音量控制区域 - 使用FLEX布局
     volume_container_ = lv_obj_create(container_);
+    lv_obj_add_flag(volume_container_, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_set_width(volume_container_, LV_PCT(100));  // 使用100%宽度，但内容固定
     lv_obj_set_height(volume_container_, 40);  // 固定高度
     lv_obj_set_style_bg_opa(volume_container_, LV_OPA_TRANSP, 0);
@@ -165,6 +173,7 @@ void MusicPlayerUI::CreateUI() {
     
     // 2. 歌曲信息区域 - 占用主要空间，显示3行文字（歌名-歌手 + 2行歌词）
     song_info_label_ = lv_label_create(container_);
+    lv_obj_add_flag(song_info_label_, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_set_width(song_info_label_, LV_PCT(90));  // 90%宽度
     lv_obj_set_height(song_info_label_, 100);  // 固定高度100px
     lv_obj_remove_flag(song_info_label_, LV_OBJ_FLAG_FLEX_IN_NEW_TRACK);  // 移除弹性增长
@@ -199,6 +208,7 @@ void MusicPlayerUI::CreateUI() {
     
     // 3. 控制按钮容器 - 使用FLEX布局
     control_container_ = lv_obj_create(container_);
+    lv_obj_add_flag(control_container_, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_set_width(control_container_, LV_PCT(100));  // 100%宽度
     lv_obj_set_height(control_container_, LV_SIZE_CONTENT);  // 高度自适应
     lv_obj_set_style_bg_opa(control_container_, LV_OPA_TRANSP, 0);
@@ -257,6 +267,7 @@ void MusicPlayerUI::CreateUI() {
     
     // 4. 进度条容器 - 固定在底部，使用FLEX布局
     progress_container_ = lv_obj_create(container_);
+    lv_obj_add_flag(progress_container_, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_set_width(progress_container_, LV_PCT(100));  // 使用100%宽度，但内容固定
     lv_obj_set_height(progress_container_, 45);  // 固定高度45px
     lv_obj_set_style_bg_opa(progress_container_, LV_OPA_TRANSP, 0);

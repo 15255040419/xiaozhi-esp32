@@ -10,6 +10,7 @@
 #include <dirent.h>
 #include <ctype.h>
 #include <limits>
+#include <stdint.h>
 
 #include "assets.h"
 #include "display/lvgl_display/lvgl_image.h"
@@ -624,11 +625,26 @@ private:
         // 先尝试从 SD 背景目录构建壁纸列表，并按 JSON 动静态选择默认 1.gif 或 1.png
         if (BuildBackgroundList()) {
             int def = -1;
-            // 优先 1.gif 或 1.png
-            for (int i = 0; i < (int)bg_files_.size(); ++i) {
-                std::string lower = bg_files_[i]; for (auto &c : lower) c = (char)tolower((unsigned char)c);
-                if (use_gif_background_) { if (lower == "1.gif") { def = i; break; } }
-                else { if (lower == "1.png") { def = i; break; } }
+            // 读取上次选中的壁纸（按主题名区分）
+            {
+                Settings s("display", false);
+                std::string key = MakeBgKeyForTheme(active_face_name_);
+                std::string saved = s.GetString(key.c_str(), "");
+                if (!saved.empty()) {
+                    std::string saved_lower = saved; for (auto &c : saved_lower) c = (char)tolower((unsigned char)c);
+                    for (int i = 0; i < (int)bg_files_.size(); ++i) {
+                        std::string lower = bg_files_[i]; for (auto &c : lower) c = (char)tolower((unsigned char)c);
+                        if (lower == saved_lower) { def = i; break; }
+                    }
+                }
+            }
+            // 若无记录或记录缺失，优先 1.gif 或 1.png
+            if (def < 0) {
+                for (int i = 0; i < (int)bg_files_.size(); ++i) {
+                    std::string lower = bg_files_[i]; for (auto &c : lower) c = (char)tolower((unsigned char)c);
+                    if (use_gif_background_) { if (lower == "1.gif") { def = i; break; } }
+                    else { if (lower == "1.png") { def = i; break; } }
+                }
             }
             if (def < 0) def = 0;
             current_bg_index_ = def;
@@ -1064,6 +1080,18 @@ private:
 
 private:
     static constexpr const char* TAG = "ClockFace";
+    // 生成短键用于 NVS（避免超过 15 字节限制）：cb_<8hex>
+    static std::string MakeBgKeyForTheme(const std::string& theme) {
+        uint32_t h = 2166136261u; // FNV-1a 32-bit
+        for (char ch : theme) {
+            char c = (char)tolower((unsigned char)ch);
+            h ^= (uint8_t)c;
+            h *= 16777619u;
+        }
+        char buf[12]; // "cb_" + 8hex + null
+        snprintf(buf, sizeof(buf), "cb_%08x", (unsigned)h);
+        return std::string(buf);
+    }
     static int ExtractLeadingNumber(const std::string& s) {
         int i = 0;
         while (i < (int)s.size() && isdigit((unsigned char)s[i])) ++i;
@@ -1411,12 +1439,23 @@ private:
             bool ok = LoadBackground(full);
             if (ok) ESP_LOGI(TAG, "Background switched (SD abs): %s", full.c_str());
             else ESP_LOGI(TAG, "Background failed (SD abs): %s", full.c_str());
-            if (ok) return true;
+            if (ok) {
+                // 持久化当前主题的壁纸选择（使用短键）
+                Settings s("display", true);
+                std::string key = MakeBgKeyForTheme(active_face_name_);
+                s.SetString(key.c_str(), bg_files_[idx]);
+                return true;
+            }
         }
         std::string path = std::string("clock_faces/") + active_face_name_ + "/background/" + bg_files_[idx];
         bool ok2 = LoadBackground(path);
         if (ok2) ESP_LOGI(TAG, "Background switched: %s", path.c_str());
         else ESP_LOGI(TAG, "Background failed: %s", path.c_str());
+        if (ok2) {
+            Settings s("display", true);
+            std::string key = MakeBgKeyForTheme(active_face_name_);
+            s.SetString(key.c_str(), bg_files_[idx]);
+        }
         return ok2;
     }
 
