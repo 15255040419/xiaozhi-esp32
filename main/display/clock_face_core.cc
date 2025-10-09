@@ -276,10 +276,10 @@ public:
             // 若绝对路径失败，继续走下面的兼容逻辑
         }
 
-        // 优先尝试 SD：将 "clock_faces/<face>/..." 映射到实际 SD 主题目录（大小写不敏感）
+        // 优先尝试 SD：将 "clock/<face>/..." 映射到实际 SD 主题目录（大小写不敏感）
         {
             std::string rel = bg_name; for (auto &ch : rel) if (ch == '\\') ch = '/';
-            const std::string prefix = "clock_faces/";
+            const std::string prefix = "clock/";
             if (rel.rfind(prefix, 0) == 0) rel = rel.substr(prefix.size());
             std::string face_dir = rel;
             size_t slash = face_dir.find('/');
@@ -336,12 +336,24 @@ public:
             }
         }
 
-        // 尝试内置资源：先用给定路径，再尝试同目录候选名
+        // 尝试内置资源：先用给定路径，再尝试同目录候选名，再尝试扁平化(clock_*)文件名
         std::string matched_key;
         auto try_load_exact = [&](const std::string& name)->bool{
             std::string key = name; for (auto &ch : key) if (ch == '\\') ch = '/';
+            // 1) 直接键
             if (assets.GetAssetData(key, ptr, size)) { matched_key = key; return true; }
-            std::string at = std::string("@") + key; if (assets.GetAssetData(at, ptr, size)) { matched_key = at; return true; }
+            // 2) @前缀
+            {
+                std::string at = std::string("@") + key; if (assets.GetAssetData(at, ptr, size)) { matched_key = at; return true; }
+            }
+            // 3) assets/ 前缀
+            {
+                std::string ak = std::string("assets/") + key; if (assets.GetAssetData(ak, ptr, size)) { matched_key = ak; return true; }
+            }
+            // 4) 扁平化（clock/flower/bg/1.gif -> clock_flower_bg_1.gif）
+            std::string flat = key; for (auto &ch : flat) if (ch == '/') ch = '_';
+            if (assets.GetAssetData(flat, ptr, size)) { matched_key = flat; return true; }
+            std::string af = std::string("assets/") + flat; if (assets.GetAssetData(af, ptr, size)) { matched_key = af; return true; }
             return false;
         };
 
@@ -529,9 +541,9 @@ private:
         std::vector<std::string> faces_builtin;
         void* ptr = nullptr; size_t size = 0;
         auto& assets = Assets::GetInstance();
-        if (assets.GetAssetData("assets/clock_faces/clock_faces.json", ptr, size) ||
-            assets.GetAssetData("clock_faces/clock_faces.json", ptr, size) ||
-            assets.GetAssetData("@clock_faces/clock_faces.json", ptr, size)) {
+        if (assets.GetAssetData("assets/clock/clock.json", ptr, size) ||
+            assets.GetAssetData("clock/clock.json", ptr, size) ||
+            assets.GetAssetData("@clock/clock.json", ptr, size)) {
             cJSON* root = cJSON_ParseWithLength((const char*)ptr, size);
             if (root) {
                 if (cJSON_IsArray(root)) {
@@ -568,7 +580,7 @@ private:
             }
             return false;
         };
-        const std::string face_path = std::string("clock_faces/") + active_face_name_ + "/face.json";
+        const std::string face_path = std::string("clock/") + active_face_name_ + "/face.json";
         // 1) SD 正常名
         if (IsSdMounted()) {
             std::string base_dir = ResolveSdClockFacesDir();
@@ -653,15 +665,16 @@ private:
             return;
         }
 
-        // 回退：直接尝试 1.gif/1.png；若缺省，再尝试主题根的 bg.* / background.*
+        // 回退：直接尝试 1.gif/1.png；若缺省，再尝试主题根的 bg.*
         {
-            std::string base = std::string("clock_faces/") + active_face_name_ + "/background/";
+            std::string base = std::string("clock/") + active_face_name_ + "/bg/";
+            // 增加对扁平化打包名的兜底（clock_face_core会递归LoadBackground，这里只尝试规范路径）
             if (!(use_gif_background_ ? LoadBackground(base + "1.gif") : LoadBackground(base + "1.png"))) {
                 // 再兜底一个候选
                 if (!LoadBackground(base + (use_gif_background_ ? "1.png" : "1.gif"))) {
                     // 最后尝试主题根目录常见命名
-            std::string theme_base = std::string("clock_faces/") + active_face_name_ + "/";
-            static const char* kRootBg[] = {"bg.gif","background.gif","bg.png","background.png"};
+            std::string theme_base = std::string("clock/") + active_face_name_ + "/";
+            static const char* kRootBg[] = {"bg.gif","bg.png"};
                     for (const char* fn : kRootBg) {
                         if (LoadBackground(theme_base + fn)) break;
                     }
@@ -844,11 +857,11 @@ private:
 
     std::string MakeNumberPath(int d) const {
         char buf[128];
-        snprintf(buf, sizeof(buf), "clock_faces/%s/number/%d.png", active_face_name_.c_str(), d);
+        snprintf(buf, sizeof(buf), "clock/%s/number/%d.png", active_face_name_.c_str(), d);
         return std::string(buf);
     }
     std::string MakeColonPath() const {
-        return std::string("clock_faces/") + active_face_name_ + "/number/colon.png";
+        return std::string("clock/") + active_face_name_ + "/number/colon.png";
     }
 
     static bool LoadImageTo(std::unique_ptr<LvglImage>& out_img, const std::string& path_png) {
@@ -858,8 +871,8 @@ private:
         std::string matched_key;
         // 先尝试 SD 文件
         {
-            // 从 path_png 截出相对路径 clock_faces/<face>/...
-            const std::string prefix = "clock_faces/";
+            // 从 path_png 截出相对路径 clock/<face>/...
+            const std::string prefix = "clock/";
             if (n1.rfind(prefix, 0) == 0) {
                 std::string base_dir = ResolveSdClockFacesDir();
                 std::string rel = n1.substr(prefix.size());
@@ -877,7 +890,19 @@ private:
                 }
             }
         }
-        auto try_key = [&](const std::string& key)->bool{ if (assets.GetAssetData(key, ptr, size)) { matched_key = key; return true; } if (assets.GetAssetData(std::string("@")+key, ptr, size)) { matched_key = std::string("@")+key; return true; } return false; };
+        auto try_key = [&](const std::string& key)->bool{
+            // 直接键
+            if (assets.GetAssetData(key, ptr, size)) { matched_key = key; return true; }
+            // @前缀
+            if (assets.GetAssetData(std::string("@")+key, ptr, size)) { matched_key = std::string("@")+key; return true; }
+            // assets/ 前缀
+            if (assets.GetAssetData(std::string("assets/")+key, ptr, size)) { matched_key = std::string("assets/")+key; return true; }
+            // 扁平化：clock/... -> clock_...
+            std::string flat = key; for (auto &ch : flat) if (ch == '/') ch = '_';
+            if (assets.GetAssetData(flat, ptr, size)) { matched_key = flat; return true; }
+            if (assets.GetAssetData(std::string("assets/")+flat, ptr, size)) { matched_key = std::string("assets/")+flat; return true; }
+            return false;
+        };
         bool ok = try_key(n1);
         if (ok) {
             try {
@@ -1376,7 +1401,7 @@ private:
         std::string base_dir = ResolveSdClockFacesDir();
         // 解析实际主题目录，避免大小写差异
         std::string theme_dir = ResolveSdThemeDir(base_dir, active_face_name_);
-        std::string dir = theme_dir + "/background";
+        std::string dir = theme_dir + "/bg";
         DIR* d = opendir(dir.c_str());
         if (!d) {
             // 兼容大小写与 8.3：在主题目录下查找以 background/backgr 开头的目录
@@ -1390,7 +1415,7 @@ private:
                 if (!test) continue; // 不是目录
                 closedir(test);
                 std::string lower = n; for (auto &c : lower) c = (char)tolower((unsigned char)c);
-                if (lower.rfind("background", 0) == 0 || lower.rfind("backgr", 0) == 0) { dir = sub; break; }
+                if (lower == "bg") { dir = sub; break; }
             }
             closedir(td);
             d = opendir(dir.c_str());
@@ -1447,7 +1472,7 @@ private:
                 return true;
             }
         }
-        std::string path = std::string("clock_faces/") + active_face_name_ + "/background/" + bg_files_[idx];
+        std::string path = std::string("clock/") + active_face_name_ + "/bg/" + bg_files_[idx];
         bool ok2 = LoadBackground(path);
         if (ok2) ESP_LOGI(TAG, "Background switched: %s", path.c_str());
         else ESP_LOGI(TAG, "Background failed: %s", path.c_str());

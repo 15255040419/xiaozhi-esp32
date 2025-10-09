@@ -630,10 +630,9 @@ if(XIAOZHI_FONTS_COMPONENT_PATH)
     set(XIAOZHI_FONTS_PATH "${XIAOZHI_FONTS_COMPONENT_PATH}")
 endif()
 
-# Include clock face assets into default assets (images/json)
+# Include clock assets (images/json) into default assets
 # Ensure only a single directory is passed to --extra_files
-set(DEFAULT_ASSETS_EXTRA_FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/clock_faces")
-# Remove explicit json path; only pass the directory to --extra_files
+set(DEFAULT_ASSETS_EXTRA_FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/clock")
 
 if(CONFIG_BOARD_TYPE_ESP_HI)
 set(URL "https://github.com/espressif2022/image_player/raw/main/test_apps/test_8bit")

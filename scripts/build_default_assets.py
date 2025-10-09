@@ -251,8 +251,8 @@ def process_emoji_collection(emoji_collection_dir, assets_dir):
 def process_extra_files(extra_files_dir, assets_dir):
     """Process default_assets_extra_files parameter
     - Preserve relative path information by encoding it into the output filename.
-      Example: clock_faces/xiangsu/number/0.png -> clock_faces_xiangsu_number_0.png
-    - Also copy sibling clock_faces.json if present (assets/clock_faces.json).
+      Example: clock/flower/number/0.png -> clock_flower_number_0.png
+    - Also copy sibling clock.json if present (assets/clock.json).
     """
     if not extra_files_dir:
         return []
@@ -273,17 +273,18 @@ def process_extra_files(extra_files_dir, assets_dir):
             src_file = os.path.join(root, file)
             # Encode relative path into a flat filename to avoid collisions
             rel_path = os.path.relpath(src_file, extra_files_dir).replace('\\', '/')
-            encoded_name = 'clock_faces_' + rel_path.replace('/', '_')
+            # keep top-level folder name 'clock'
+            encoded_name = 'clock_' + rel_path.replace('/', '_')
             dst_file = os.path.join(assets_dir, encoded_name)
             if copy_file(src_file, dst_file):
                 extra_files_list.append(encoded_name)
 
     # Additionally include top-level clock_faces.json if it exists next to the directory
-    sibling_json = os.path.join(os.path.dirname(extra_files_dir), 'clock_faces.json')
+    sibling_json = os.path.join(os.path.dirname(extra_files_dir), 'clock.json')
     if os.path.exists(sibling_json):
-        dst_json = os.path.join(assets_dir, 'clock_faces.json')
+        dst_json = os.path.join(assets_dir, 'clock.json')
         if copy_file(sibling_json, dst_json):
-            extra_files_list.append('clock_faces.json')
+            extra_files_list.append('clock.json')
 
     if extra_files_list:
         print(f"Processed {len(extra_files_list)} extra files from: {extra_files_dir}")
