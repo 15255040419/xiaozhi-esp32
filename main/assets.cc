@@ -9,15 +9,12 @@
 #include <spi_flash_mmap.h>
 #include <esp_timer.h>
 #include <cbin_font.h>
-#include <set>
-#include <dirent.h>
-#include <ctype.h>
 
 
 #define TAG "Assets"
 
 struct mmap_assets_table {
-    char asset_name[96];          /*!< Name of the asset (match packer name_length) */
+    char asset_name[32];          /*!< Name of the asset */
     uint32_t asset_size;          /*!< Size of the asset */
     uint32_t asset_offset;        /*!< Offset of the asset */
     uint16_t asset_width;         /*!< Width of the asset */
@@ -517,27 +514,4 @@ bool Assets::GetAssetData(const std::string& name, void*& ptr, size_t& size) {
     ptr = static_cast<void*>(const_cast<char*>(data + 2));
     size = asset->second.size;
     return true;
-}
-
-bool Assets::ReadFileFromSd(const char* path, std::string& out) {
-    FILE* f = fopen(path, "rb");
-    if (!f) return false;
-    fseek(f, 0, SEEK_END);
-    long len = ftell(f);
-    if (len <= 0) { fclose(f); return false; }
-    fseek(f, 0, SEEK_SET);
-    out.resize(static_cast<size_t>(len));
-    size_t n = fread(out.data(), 1, out.size(), f);
-    fclose(f);
-    return n == out.size();
-}
-
-std::vector<std::string> Assets::ListAssetsWithPrefix(const std::string& prefix) const {
-    std::vector<std::string> out;
-    for (const auto& kv : assets_) {
-        if (kv.first.rfind(prefix, 0) == 0) {
-            out.push_back(kv.first);
-        }
-    }
-    return out;
 }
