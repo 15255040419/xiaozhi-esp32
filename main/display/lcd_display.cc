@@ -14,6 +14,7 @@
 #include <esp_lvgl_port.h>
 #include <esp_psram.h>
 #include <cstring>
+#include <dirent.h>
 
 #include "board.h"
 #include "application.h"
@@ -30,6 +31,13 @@ extern "C" {
 }
 
 #define TAG "LcdDisplay"
+
+
+static bool IsSdMounted() {
+    DIR* root = opendir("/sdcard");
+    if (root) { closedir(root); return true; }
+    return false;
+}
 
 
 LV_FONT_DECLARE(BUILTIN_TEXT_FONT);
@@ -1742,10 +1750,15 @@ void LcdDisplay::OnStateMaybeChanged() {
 
     UIMode target = UIMode::Chat;
     if (device_state == kDeviceStateIdle) {
-        target = music_playing ? UIMode::Music : UIMode::Clock;
+		target = music_playing ? UIMode::Music : UIMode::Clock;
     } else if (device_state == kDeviceStateListening || device_state == kDeviceStateSpeaking) {
         target = UIMode::Chat;
     }
+
+	// 未插卡：不要进入时钟界面
+	if (target == UIMode::Clock && !IsSdMounted()) {
+		target = UIMode::Chat;
+	}
 
     ApplyUIMode(target);
 }
@@ -1754,6 +1767,12 @@ void LcdDisplay::ApplyUIMode(UIMode mode) {
     switch (mode) {
         case UIMode::Clock:
             HideMusicPlayer();
+		// 未插卡：直接显示聊天界面，不进入时钟界面
+		if (!IsSdMounted()) {
+			ESP_LOGI(TAG, "SD not mounted; show Chat UI instead of Clock");
+			HideClockFace();
+			break; // 等价于 Chat 分支：隐藏音乐和时钟
+		}
             // WiFi 未连接时先不显示时钟界面，待联网成功回调再显示
             {
                 auto& app = Application::GetInstance(); (void)app;

@@ -2,7 +2,6 @@
 
 #include "application.h"
 #include "display.h"
-#include "display/lcd_display.h"
 #include "assets/lang_config.h"
 
 #include <esp_log.h>
@@ -35,12 +34,6 @@ void Ml307Board::StartNetwork() {
     modem_->OnNetworkStateChanged([this, &application](bool network_ready) {
         if (network_ready) {
             ESP_LOGI(TAG, "Network is ready");
-            // 4G 联网就绪后，进入时钟界面（与 WiFi 逻辑一致：联网成功才显示）
-            application.Schedule([](){
-                auto display = Board::GetInstance().GetDisplay();
-                // 避免在此文件直接依赖 UIMode/LcdDisplay，使用显示层已有的状态驱动
-                if (display) display->UpdateStatusBar(true);
-            });
         } else {
             ESP_LOGE(TAG, "Network is down");
             auto device_state = application.GetDeviceState();

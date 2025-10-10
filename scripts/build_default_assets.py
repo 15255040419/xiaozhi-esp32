@@ -249,47 +249,8 @@ def process_emoji_collection(emoji_collection_dir, assets_dir):
 
 
 def process_extra_files(extra_files_dir, assets_dir):
-    """Process default_assets_extra_files parameter
-    - Preserve relative path information by encoding it into the output filename.
-      Example: clock/flower/number/0.png -> clock_flower_number_0.png
-    - Also copy sibling clock.json if present (assets/clock.json).
-    """
-    if not extra_files_dir:
-        return []
-
-    if not os.path.exists(extra_files_dir):
-        print(f"Warning: Extra files directory not found: {extra_files_dir}")
-        return []
-
-    extra_files_list = []
-
-    # Copy each file from input directory to build/assets directory with encoded names
-    for root, dirs, files in os.walk(extra_files_dir):
-        for file in files:
-            # Skip hidden files and directories
-            if file.startswith('.'):
-                continue
-
-            src_file = os.path.join(root, file)
-            # Encode relative path into a flat filename to avoid collisions
-            rel_path = os.path.relpath(src_file, extra_files_dir).replace('\\', '/')
-            # keep top-level folder name 'clock'
-            encoded_name = 'clock_' + rel_path.replace('/', '_')
-            dst_file = os.path.join(assets_dir, encoded_name)
-            if copy_file(src_file, dst_file):
-                extra_files_list.append(encoded_name)
-
-    # Additionally include top-level clock_faces.json if it exists next to the directory
-    sibling_json = os.path.join(os.path.dirname(extra_files_dir), 'clock.json')
-    if os.path.exists(sibling_json):
-        dst_json = os.path.join(assets_dir, 'clock.json')
-        if copy_file(sibling_json, dst_json):
-            extra_files_list.append('clock.json')
-
-    if extra_files_list:
-        print(f"Processed {len(extra_files_list)} extra files from: {extra_files_dir}")
-
-    return extra_files_list
+    """No extra files packing: clock themes are SD-only now."""
+    return []
 
 
 def generate_index_json(assets_dir, srmodels, text_font, emoji_collection, extra_files=None, multinet_model_info=None):

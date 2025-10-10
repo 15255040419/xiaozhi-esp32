@@ -11,6 +11,10 @@
 #include <ctype.h>
 #include <limits>
 #include <stdint.h>
+#include <stdio.h>
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "assets.h"
 #include "display/lvgl_display/lvgl_image.h"
@@ -80,6 +84,12 @@ public:
     }
 
     void Show() {
+        // 不插卡：完全不显示时钟界面
+        if (!IsSdMounted()) {
+            g_clock_face_active = false;
+            if (container_) lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN);
+            return;
+        }
         if (container_) {
             lv_obj_clear_flag(container_, LV_OBJ_FLAG_HIDDEN);
             lv_obj_move_foreground(container_);
@@ -100,13 +110,7 @@ public:
             }
             loaded_from_settings_ = true;
         }
-        // 若未插 SD，而上次保存的是 SD 主题，则回退到内置 flower
-        if (!IsSdMounted() && active_face_name_ != "flower") {
-            ESP_LOGW(TAG, "SD not mounted; fallback to built-in theme 'flower' (was '%s')", active_face_name_.c_str());
-            active_face_name_ = "flower";
-            Settings s("display", true);
-            s.SetString("clock_face", active_face_name_);
-        }
+        // 此时已确认 SD 可用
         LoadFaceConfig();
         if (use_absolute_positions_) {
             if (time_container_) lv_obj_add_flag(time_container_, LV_OBJ_FLAG_HIDDEN);
@@ -132,6 +136,8 @@ public:
         // 加载背景资源（首次显示时）
         LoadBackgroundIfNeeded();
         if (gif_) gif_->Start();
+        // 给底层 I/O 与任务切换一个短暂喘息，避免紧接着的小图读取受阻
+        vTaskDelay(pdMS_TO_TICKS(50));
         EnsureDigitsLoaded();
         StartTick();
         UpdateTime();
@@ -163,20 +169,8 @@ public:
 
     // 辅助：解析 SD 卡 clock_faces 目录（兼容 8.3 短名）
     static std::string ResolveSdClockFacesDir() {
-        const char* kDefault = "/sdcard/clock_faces";
-        DIR* d = opendir(kDefault);
-        if (d) { closedir(d); return kDefault; }
-        DIR* root = opendir("/sdcard");
-        if (!root) return kDefault;
-        std::string base = kDefault;
-        struct dirent* e;
-        while ((e = readdir(root)) != nullptr) {
-            const char* n = e->d_name; if (!n) continue;
-            std::string lower = n; for (auto &c : lower) c = (char)tolower((unsigned char)c);
-            if (lower == "clock_faces" || lower.rfind("clock", 0) == 0) { base = std::string("/sdcard/") + n; break; }
-        }
-        closedir(root);
-        return base;
+        // 固定路径为 /sdcard/clock
+        return std::string("/sdcard/clock");
     }
 
     static bool IsSdMounted() {
@@ -202,11 +196,30 @@ public:
         return fallback;
     }
 
-    // 从 assets 或 SD 加载壁纸（精简且括号严格配平）
+    // 兼容查找 face.json：支持大小写与 8.3 短文件名（如 FACE.JSON / FACE~1.JSO）
+    static std::string FindFaceJsonInDir(const std::string& dir) {
+        DIR* d = opendir(dir.c_str());
+        if (!d) return std::string();
+        struct dirent* e;
+        while ((e = readdir(d)) != nullptr) {
+            const char* n = e->d_name; if (!n || n[0] == '.') continue;
+            std::string lower = n; for (auto &c : lower) c = (char)tolower((unsigned char)c);
+            // 拆分扩展名
+            size_t dot = lower.rfind('.');
+            std::string name = (dot == std::string::npos) ? lower : lower.substr(0, dot);
+            std::string ext  = (dot == std::string::npos) ? std::string() : lower.substr(dot + 1);
+            if (name.rfind("face", 0) == 0 && (ext == "json" || ext == "jso")) {
+                std::string path = dir + "/" + e->d_name;
+                closedir(d);
+                return path;
+            }
+        }
+        closedir(d);
+        return std::string();
+    }
+
+    // 从 SD 加载壁纸（SD-only）
     bool LoadBackground(const std::string& bg_name) {
-        auto& assets = Assets::GetInstance();
-        void* ptr = nullptr;
-        size_t size = 0;
         if (!background_img_) return false;
         if (bg_name.empty()) {
             lv_obj_add_flag(background_img_, LV_OBJ_FLAG_HIDDEN);
@@ -224,158 +237,57 @@ public:
             gif_.reset();
         }
 
-        // 直接传入了 SD 绝对路径：/sdcard/...
+        // 计算唯一的 SD 绝对路径
+        std::string absolute_sd_path;
         if (bg_name.rfind("/sdcard/", 0) == 0) {
-            std::string data;
-            if (Assets::ReadFileFromSd(bg_name.c_str(), data)) {
-                std::unique_ptr<LvglRawImage> probe = std::make_unique<LvglRawImage>((void*)data.data(), data.size());
-                if (probe->IsGif()) {
-                    // 为 GIF 分配持久缓冲，并直接基于原始数据创建 GIF，不走静态图片解码
-                    if (gif_sd_buf_) { heap_caps_free(gif_sd_buf_); gif_sd_buf_ = nullptr; gif_sd_size_ = 0; }
-                    void* copy_buf = heap_caps_malloc(data.size(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-                    if (copy_buf) memcpy(copy_buf, data.data(), data.size());
-                    gif_sd_buf_ = copy_buf;
-                    gif_sd_size_ = data.size();
-                    lv_img_dsc_t raw;
-                    memset(&raw, 0, sizeof(raw));
-                    raw.data = static_cast<const uint8_t*>(gif_sd_buf_);
-                    raw.data_size = gif_sd_size_;
-                    raw.header.magic = LV_IMAGE_HEADER_MAGIC;
-                    raw.header.cf = LV_COLOR_FORMAT_RAW_ALPHA;
-                    gif_ = std::make_unique<LvglGif>(&raw);
-                    if (gif_ && gif_->IsLoaded()) {
-                        gif_->SetFrameCallback([this]() {
-                            if (background_img_) {
-                                lv_image_set_src(background_img_, gif_->image_dsc());
-                                lv_obj_invalidate(background_img_);
-                            }
-                        });
-                        lv_image_set_src(background_img_, gif_->image_dsc());
-                        lv_obj_clear_flag(background_img_, LV_OBJ_FLAG_HIDDEN);
-                        SetLoopMode(loop_mode_);
-                        gif_->Start();
-                        return true;
-                    }
-                } else {
-                    void* copy_buf = heap_caps_malloc(data.size(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-                    if (copy_buf) memcpy(copy_buf, data.data(), data.size());
-                    try {
-                        background_image_ = std::make_unique<LvglAllocatedImage>(copy_buf, data.size());
-                        if (background_image_ && background_image_->image_dsc()) {
-                            lv_image_set_src(background_img_, background_image_->image_dsc());
-                            lv_obj_clear_flag(background_img_, LV_OBJ_FLAG_HIDDEN);
-                            return true;
-                        }
-                    } catch (...) {
-                        ESP_LOGE(TAG, "Background static image decode failed (SD abs)");
-                        if (copy_buf) heap_caps_free(copy_buf);
-                        background_image_.reset();
-                    }
-                }
-            }
-            // 若绝对路径失败，继续走下面的兼容逻辑
-        }
-
-        // 优先尝试 SD：将 "clock/<face>/..." 映射到实际 SD 主题目录（大小写不敏感）
-        {
+            absolute_sd_path = bg_name;
+        } else {
             std::string rel = bg_name; for (auto &ch : rel) if (ch == '\\') ch = '/';
             const std::string prefix = "clock/";
-            if (rel.rfind(prefix, 0) == 0) rel = rel.substr(prefix.size());
+            if (rel.rfind(prefix, 0) != 0) {
+                ESP_LOGE(TAG, "Invalid background path format: %s", bg_name.c_str());
+                return false;
+            }
+            rel = rel.substr(prefix.size());
             std::string face_dir = rel;
             size_t slash = face_dir.find('/');
             std::string rest;
             if (slash != std::string::npos) { rest = face_dir.substr(slash + 1); face_dir = face_dir.substr(0, slash); }
             std::string base_dir = ResolveSdClockFacesDir();
             std::string theme_dir = ResolveSdThemeDir(base_dir, face_dir);
-            std::string sd_path = theme_dir + (rest.empty() ? std::string("") : std::string("/") + rest);
-            std::string data;
-            if (!sd_path.empty() && Assets::ReadFileFromSd(sd_path.c_str(), data)) {
-                std::unique_ptr<LvglRawImage> probe = std::make_unique<LvglRawImage>((void*)data.data(), data.size());
-                if (probe->IsGif()) {
-                    if (gif_sd_buf_) { heap_caps_free(gif_sd_buf_); gif_sd_buf_ = nullptr; gif_sd_size_ = 0; }
-                    void* copy_buf = heap_caps_malloc(data.size(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-                    if (copy_buf) memcpy(copy_buf, data.data(), data.size());
-                    gif_sd_buf_ = copy_buf;
-                    gif_sd_size_ = data.size();
-                    lv_img_dsc_t raw;
-                    memset(&raw, 0, sizeof(raw));
-                    raw.data = static_cast<const uint8_t*>(gif_sd_buf_);
-                    raw.data_size = gif_sd_size_;
-                    raw.header.magic = LV_IMAGE_HEADER_MAGIC;
-                    raw.header.cf = LV_COLOR_FORMAT_RAW_ALPHA;
-                    gif_ = std::make_unique<LvglGif>(&raw);
-                    if (gif_ && gif_->IsLoaded()) {
-                        gif_->SetFrameCallback([this]() {
-                            if (background_img_) {
-                                lv_image_set_src(background_img_, gif_->image_dsc());
-                                lv_obj_invalidate(background_img_);
-                            }
-                        });
-                        lv_image_set_src(background_img_, gif_->image_dsc());
-                        lv_obj_clear_flag(background_img_, LV_OBJ_FLAG_HIDDEN);
-                        SetLoopMode(loop_mode_);
-                        gif_->Start();
-                        return true;
-                    }
-                } else {
-                    void* copy_buf = heap_caps_malloc(data.size(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-                    if (copy_buf) memcpy(copy_buf, data.data(), data.size());
-                    try {
-                        background_image_ = std::make_unique<LvglAllocatedImage>(copy_buf, data.size());
-                        if (background_image_ && background_image_->image_dsc()) {
-                            lv_image_set_src(background_img_, background_image_->image_dsc());
-                            lv_obj_clear_flag(background_img_, LV_OBJ_FLAG_HIDDEN);
-                            return true;
-                        }
-                    } catch (...) {
-                        ESP_LOGE(TAG, "Background static image decode failed (SD mapped)");
-                        if (copy_buf) heap_caps_free(copy_buf);
-                        background_image_.reset();
-                    }
-                }
-            }
+            absolute_sd_path = theme_dir + (rest.empty() ? std::string("") : std::string("/") + rest);
         }
 
-        // 尝试内置资源：先用给定路径，再尝试同目录候选名，再尝试扁平化(clock_*)文件名
-        std::string matched_key;
-        auto try_load_exact = [&](const std::string& name)->bool{
-            std::string key = name; for (auto &ch : key) if (ch == '\\') ch = '/';
-            // 1) 直接键
-            if (assets.GetAssetData(key, ptr, size)) { matched_key = key; return true; }
-            // 2) @前缀
-            {
-                std::string at = std::string("@") + key; if (assets.GetAssetData(at, ptr, size)) { matched_key = at; return true; }
-            }
-            // 3) assets/ 前缀
-            {
-                std::string ak = std::string("assets/") + key; if (assets.GetAssetData(ak, ptr, size)) { matched_key = ak; return true; }
-            }
-            // 4) 扁平化（clock/flower/bg/1.gif -> clock_flower_bg_1.gif）
-            std::string flat = key; for (auto &ch : flat) if (ch == '/') ch = '_';
-            if (assets.GetAssetData(flat, ptr, size)) { matched_key = flat; return true; }
-            std::string af = std::string("assets/") + flat; if (assets.GetAssetData(af, ptr, size)) { matched_key = af; return true; }
-            return false;
-        };
-
-        // 先尝试当前主题（仅精确路径）
-        if (!try_load_exact(bg_name)) {
-            // 再尝试当前主题目录下的常见命名（gif/png）
-            std::string base; auto slash = bg_name.find_last_of('/'); if (slash != std::string::npos) base = bg_name.substr(0, slash + 1);
-            bool ok = false;
-            for (int ci = 0; ci < 4; ++ci) {
-                if (try_load_exact(base + kBgCandidates_[ci])) { ok = true; break; }
-            }
-            if (!ok) {
-                ESP_LOGW(TAG, "Background not found in theme: %s", bg_name.c_str());
-                return false;
-            }
+        // 读文件并处理
+        void* file_buf = nullptr; size_t file_sz = 0;
+        if (ReadFileToPsram(absolute_sd_path.c_str(), &file_buf, &file_sz)) {
+            if (ProcessBackgroundImageData(file_buf, file_sz)) return true;
         }
+        ESP_LOGW(TAG, "Background not found on SD: %s", absolute_sd_path.c_str());
+        return false;
+    }
 
-        // 解码并设置
-        std::unique_ptr<LvglImage> raw = std::make_unique<LvglRawImage>(ptr, size);
-        if (raw->IsGif()) {
-            gif_ = std::make_unique<LvglGif>(raw->image_dsc());
-            if (gif_->IsLoaded()) {
+private:
+    // 共享背景候选名（优先 gif，再 png，再 jpg）
+    static constexpr const char* kBgCandidates_[2] = {
+        "1.gif", "1.png"
+    };
+
+    // 处理背景图像数据：接管 file_buf（成功时由 gif_/background_image_ 管理，失败时负责释放）
+    bool ProcessBackgroundImageData(void* file_buf, size_t file_sz) {
+        if (!file_buf || file_sz == 0) return false;
+        std::unique_ptr<LvglRawImage> probe = std::make_unique<LvglRawImage>(file_buf, file_sz);
+        if (probe->IsGif()) {
+            if (gif_sd_buf_) { heap_caps_free(gif_sd_buf_); gif_sd_buf_ = nullptr; gif_sd_size_ = 0; }
+            gif_sd_buf_ = file_buf;
+            gif_sd_size_ = file_sz;
+            lv_img_dsc_t raw{};
+            raw.data = static_cast<const uint8_t*>(gif_sd_buf_);
+            raw.data_size = gif_sd_size_;
+            raw.header.magic = LV_IMAGE_HEADER_MAGIC;
+            raw.header.cf = LV_COLOR_FORMAT_RAW_ALPHA;
+            gif_ = std::make_unique<LvglGif>(&raw);
+            if (gif_ && gif_->IsLoaded()) {
                 gif_->SetFrameCallback([this]() {
                     if (background_img_) {
                         lv_image_set_src(background_img_, gif_->image_dsc());
@@ -388,34 +300,26 @@ public:
                 gif_->Start();
                 return true;
             }
-            gif_.reset();
-        }
-        void* copy_buf = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (copy_buf) memcpy(copy_buf, ptr, size);
-        try {
-            background_image_ = std::make_unique<LvglAllocatedImage>(copy_buf, size);
-            if (!background_image_ || !background_image_->image_dsc()) {
-                ESP_LOGE(TAG, "Failed to decode background image (assets)");
-                return false;
-            }
-            lv_image_set_src(background_img_, background_image_->image_dsc());
-            lv_obj_clear_flag(background_img_, LV_OBJ_FLAG_HIDDEN);
-            return true;
-        } catch (...) {
-            ESP_LOGE(TAG, "Background static image decode failed (assets)");
-            if (copy_buf) heap_caps_free(copy_buf);
-            background_image_.reset();
+            // GIF 构建失败则释放缓冲
+            heap_caps_free(gif_sd_buf_);
+            gif_sd_buf_ = nullptr; gif_sd_size_ = 0;
             return false;
         }
+        // 静态图
+        try {
+            background_image_ = std::make_unique<LvglAllocatedImage>(file_buf, file_sz);
+            if (background_image_ && background_image_->image_dsc()) {
+                lv_image_set_src(background_img_, background_image_->image_dsc());
+                lv_obj_clear_flag(background_img_, LV_OBJ_FLAG_HIDDEN);
+                return true;
+            }
+        } catch (...) {
+            ESP_LOGE(TAG, "Background static image decode failed");
+        }
+        if (file_buf) heap_caps_free(file_buf);
+        background_image_.reset();
+        return false;
     }
-
-private:
-    // 共享背景候选名（优先 gif，再 png，再 jpg）
-    static constexpr const char* kBgCandidates_[4] = {
-        "bg.gif", "background.gif", "bg.png", "background.png"
-    };
-
-    // （已不再使用的辅助函数移除）
 
         // 统一解析 face.json 内容
     bool ParseFaceJsonBuffer(const char* buf, size_t len) {
@@ -424,50 +328,50 @@ private:
         if (!root) return false;
         auto cleanup = [&](){ cJSON_Delete(root); };
 
-        // use_gif_background
-        cJSON* gif_bg = cJSON_GetObjectItem(root, "use_gif_background");
-        if (cJSON_IsString(gif_bg)) {
+                // use_gif_background
+                cJSON* gif_bg = cJSON_GetObjectItem(root, "use_gif_background");
+                if (cJSON_IsString(gif_bg)) {
             std::string v = gif_bg->valuestring; for (auto &ch : v) ch = (char)tolower((unsigned char)ch);
-            use_gif_background_ = (v == "yes" || v == "true" || v == "1");
-        }
+                    use_gif_background_ = (v == "yes" || v == "true" || v == "1");
+                }
         // background_loop
-        cJSON* loop = cJSON_GetObjectItem(root, "background_loop");
-        if (cJSON_IsString(loop)) {
+                cJSON* loop = cJSON_GetObjectItem(root, "background_loop");
+                if (cJSON_IsString(loop)) {
             std::string v = loop->valuestring; for (auto &ch : v) ch = (char)tolower((unsigned char)ch);
             if (v == "once") loop_mode_ = LOOP_ONCE; else if (v == "none") loop_mode_ = LOOP_NONE; else loop_mode_ = LOOP_INFINITE;
-        } else if (cJSON_IsNumber(loop)) {
+                } else if (cJSON_IsNumber(loop)) {
             int n = loop->valueint; loop_mode_ = (n == 0 ? LOOP_NONE : (n == 1 ? LOOP_ONCE : LOOP_INFINITE));
-        }
+                }
         // use_text_time
-        cJSON* txt = cJSON_GetObjectItem(root, "use_text_time");
-        if (cJSON_IsString(txt)) {
+                cJSON* txt = cJSON_GetObjectItem(root, "use_text_time");
+                if (cJSON_IsString(txt)) {
             std::string v = txt->valuestring; for (auto &ch : v) ch = (char)tolower((unsigned char)ch);
-            use_text_time_ = (v == "yes" || v == "true" || v == "1");
-        } else if (cJSON_IsBool(txt)) {
-            use_text_time_ = cJSON_IsTrue(txt);
-        } else if (cJSON_IsNumber(txt)) {
-            use_text_time_ = (txt->valueint != 0);
-        }
+                    use_text_time_ = (v == "yes" || v == "true" || v == "1");
+                } else if (cJSON_IsBool(txt)) {
+                    use_text_time_ = cJSON_IsTrue(txt);
+                } else if (cJSON_IsNumber(txt)) {
+                    use_text_time_ = (txt->valueint != 0);
+                }
         // optional text params（缩放已停用，仅保留 date_gap/time_y 可选偏移）
-        auto read_int = [&](const char* key, int &out){ cJSON* n = cJSON_GetObjectItem(root, key); if (cJSON_IsNumber(n)) out = n->valueint; };
+                auto read_int = [&](const char* key, int &out){ cJSON* n = cJSON_GetObjectItem(root, key); if (cJSON_IsNumber(n)) out = n->valueint; };
         read_int("text_time_y", time_y_offset_);
         read_int("text_date_gap", date_gap_);
-        // positions
-        auto read_xy = [&](const char* key, std::array<int,2>& out) -> bool {
-            cJSON* a = cJSON_GetObjectItem(root, key);
-            if (!a || !cJSON_IsArray(a) || cJSON_GetArraySize(a) != 2) return false;
-            cJSON* x = cJSON_GetArrayItem(a, 0);
-            cJSON* y = cJSON_GetArrayItem(a, 1);
-            if (!cJSON_IsNumber(x) || !cJSON_IsNumber(y)) return false;
-            out[0] = x->valueint; out[1] = y->valueint; return true;
-        };
+                // positions
+                auto read_xy = [&](const char* key, std::array<int,2>& out) -> bool {
+                    cJSON* a = cJSON_GetObjectItem(root, key);
+                    if (!a || !cJSON_IsArray(a) || cJSON_GetArraySize(a) != 2) return false;
+                    cJSON* x = cJSON_GetArrayItem(a, 0);
+                    cJSON* y = cJSON_GetArrayItem(a, 1);
+                    if (!cJSON_IsNumber(x) || !cJSON_IsNumber(y)) return false;
+                    out[0] = x->valueint; out[1] = y->valueint; return true;
+                };
         std::array<int, 2> pos_h_a{0,0}, pos_h_b{0,0}, pos_m_a{0,0}, pos_m_b{0,0}, pos_colon{0,0};
-        bool ok = true;
-        ok &= read_xy("pos_clock_hour_a", pos_h_a);
-        ok &= read_xy("pos_clock_hour_b", pos_h_b);
-        ok &= read_xy("pos_clock_min_a", pos_m_a);
-        ok &= read_xy("pos_clock_min_b", pos_m_b);
-        has_colon_pos_ = read_xy("pos_clock_colon", pos_colon);
+                bool ok = true;
+                ok &= read_xy("pos_clock_hour_a", pos_h_a);
+                ok &= read_xy("pos_clock_hour_b", pos_h_b);
+                ok &= read_xy("pos_clock_min_a", pos_m_a);
+                ok &= read_xy("pos_clock_min_b", pos_m_b);
+                has_colon_pos_ = read_xy("pos_clock_colon", pos_colon);
         // 兼容简写键名：ha/hb/ma/mb/colon
         if (!ok) {
             ok = true;
@@ -502,128 +406,61 @@ private:
             };
             ok = try_array("pos") || try_array("positions");
         }
-        if (ok) {
-            use_absolute_positions_ = true;
+                if (ok) {
+                    use_absolute_positions_ = true;
             pos_[0] = pos_h_a; pos_[1] = pos_h_b; pos_[2] = pos_m_a; pos_[3] = pos_m_b; if (has_colon_pos_) pos_[4] = pos_colon;
-            ESP_LOGI(TAG, "Loaded face.json positions: HA(%d,%d) HB(%d,%d) MA(%d,%d) MB(%d,%d)",
-                     pos_[0][0], pos_[0][1], pos_[1][0], pos_[1][1], pos_[2][0], pos_[2][1], pos_[3][0], pos_[3][1]);
-        } else {
-            use_absolute_positions_ = false;
-            ESP_LOGI(TAG, "face.json positions missing or invalid, using auto layout");
-        }
+                    ESP_LOGI(TAG, "Loaded face.json positions: HA(%d,%d) HB(%d,%d) MA(%d,%d) MB(%d,%d)",
+                             pos_[0][0], pos_[0][1], pos_[1][0], pos_[1][1], pos_[2][0], pos_[2][1], pos_[3][0], pos_[3][1]);
+                } else {
+                    use_absolute_positions_ = false;
+                    ESP_LOGI(TAG, "face.json positions missing or invalid, using auto layout");
+                }
         cleanup();
         return true;
     }
     // 本地主题枚举：优先 SD（兼容短名/缺 face.json），否则回退内置 assets 键名
     std::vector<std::string> ListClockFacesLocal() const {
         std::vector<std::string> faces;
-        // 1) SD 根目录解析真实 clock_faces 路径
-        if (IsSdMounted()) {
-            std::string base_dir = ResolveSdClockFacesDir();
-            DIR* dir = opendir(base_dir.c_str());
-            if (dir) {
-            struct dirent* ent;
-            while ((ent = readdir(dir)) != nullptr) {
-                const char* name = ent->d_name; if (!name || name[0]=='.') continue;
-                std::string theme_dir = base_dir + "/" + name;
-                DIR* sub = opendir(theme_dir.c_str());
-                if (!sub) continue;
-                closedir(sub);
-                // 归一化成小写，后续路径按小写构造，避免大小写差异
-                std::string lower = name; for (auto &c : lower) c = (char)tolower((unsigned char)c);
-                faces.emplace_back(lower);
-            }
-                closedir(dir);
-                if (!faces.empty()) return faces;
-            }
+        if (!IsSdMounted()) return faces;
+        std::string base_dir = ResolveSdClockFacesDir();
+        DIR* dir = opendir(base_dir.c_str());
+        if (!dir) return faces;
+        struct dirent* ent;
+        while ((ent = readdir(dir)) != nullptr) {
+            const char* name = ent->d_name; if (!name || name[0]=='.') continue;
+            std::string theme_dir = base_dir + "/" + name;
+            DIR* sub = opendir(theme_dir.c_str());
+            if (!sub) continue;
+            closedir(sub);
+            std::string lower = name; for (auto &c : lower) c = (char)tolower((unsigned char)c);
+            faces.emplace_back(lower);
         }
-        // 2) 回退到内置：直接使用内置清单文件（若存在）
-        std::vector<std::string> faces_builtin;
-        void* ptr = nullptr; size_t size = 0;
-        auto& assets = Assets::GetInstance();
-        if (assets.GetAssetData("assets/clock/clock.json", ptr, size) ||
-            assets.GetAssetData("clock/clock.json", ptr, size) ||
-            assets.GetAssetData("@clock/clock.json", ptr, size)) {
-            cJSON* root = cJSON_ParseWithLength((const char*)ptr, size);
-            if (root) {
-                if (cJSON_IsArray(root)) {
-                    int n = cJSON_GetArraySize(root);
-                    for (int i = 0; i < n; ++i) {
-                        cJSON* it = cJSON_GetArrayItem(root, i);
-                        if (cJSON_IsString(it)) {
-                            std::string v = it->valuestring; for (auto &c : v) c = (char)tolower((unsigned char)c);
-                            faces_builtin.emplace_back(v);
-                        }
-                    }
-                }
-                cJSON_Delete(root);
-            }
-        }
-        return faces_builtin;
+        closedir(dir);
+        return faces;
     }
     // 加载配置（仅解析JSON，不加载资源）
     void LoadFaceConfig() {
-        // 允许多次调用，以便在 assets 就绪后能生效
-        void* ptr = nullptr; size_t size = 0;
-        auto& assets = Assets::GetInstance();
-        auto try_get = [&](const std::string& name)->bool{
-            std::string n1 = name; for (auto &ch : n1) if (ch == '\\') ch = '/';
-            if (assets.GetAssetData(n1, ptr, size)) return true;
-            std::string n2 = std::string("@") + n1;
-            if (assets.GetAssetData(n2, ptr, size)) return true;
-            std::string n3 = n1; for (auto &ch : n3) if (ch == '/') ch = '_';
-            if (assets.GetAssetData(n3, ptr, size)) return true;
-            auto p = n1.find_last_of('/');
-            if (p != std::string::npos) {
-                std::string base = n1.substr(p + 1);
-                if (assets.GetAssetData(base, ptr, size)) return true;
-            }
-            return false;
-        };
-        const std::string face_path = std::string("clock/") + active_face_name_ + "/face.json";
-        // 1) SD 正常名
-        if (IsSdMounted()) {
-            std::string base_dir = ResolveSdClockFacesDir();
-            std::string theme_dir = ResolveSdThemeDir(base_dir, active_face_name_);
-            std::string sd_path = theme_dir + "/face.json";
-            std::string data;
-            if (Assets::ReadFileFromSd(sd_path.c_str(), data)) {
-                ESP_LOGI(TAG, "Try SD face.json: %s", sd_path.c_str());
-                if (ParseFaceJsonBuffer(data.data(), data.size())) return;
-            }
-            // 2) SD 短名 FACE.JSO
-            std::string sd_short = theme_dir + "/FACE.JSO";
-            if (Assets::ReadFileFromSd(sd_short.c_str(), data)) {
-                ESP_LOGI(TAG, "Try SD FACE.JSO: %s", sd_short.c_str());
-                if (ParseFaceJsonBuffer(data.data(), data.size())) return;
-            }
-            // 3) SD 大写 JSON: FACE.JSON（部分卡会保留大写扩展名）
-            std::string sd_upper = theme_dir + "/FACE.JSON";
-            if (Assets::ReadFileFromSd(sd_upper.c_str(), data)) {
-                ESP_LOGI(TAG, "Try SD FACE.JSON: %s", sd_upper.c_str());
-                if (ParseFaceJsonBuffer(data.data(), data.size())) return;
-            }
-            // 4) 目录内兜底：枚举 face*.json（大小写不敏感，兼容 8.3）
-            DIR* td = opendir(theme_dir.c_str());
-            if (td) {
-                struct dirent* e;
-                while ((e = readdir(td)) != nullptr) {
-                    const char* n = e->d_name; if (!n || n[0]=='.') continue;
-                    std::string lower = n; for (auto &c : lower) c = (char)tolower((unsigned char)c);
-                    bool looks = (lower == "face.json") || (lower == "face.jso") || (lower.find("face") != std::string::npos && (lower.rfind(".json") == lower.size()-5 || lower.rfind(".jso") == lower.size()-4));
-                    if (!looks) continue;
-                    std::string p = theme_dir + "/" + n;
-                    if (Assets::ReadFileFromSd(p.c_str(), data)) {
-                        ESP_LOGI(TAG, "Try SD face(any): %s", p.c_str());
-                        if (ParseFaceJsonBuffer(data.data(), data.size())) { closedir(td); return; }
-                    }
-                }
-                closedir(td);
+        if (!IsSdMounted()) return;
+        std::string base_dir = ResolveSdClockFacesDir();
+        std::string theme_dir = ResolveSdThemeDir(base_dir, active_face_name_);
+        std::string sd_path = theme_dir + "/face.json";
+        void* buf = nullptr; size_t len = 0;
+        if (!ReadFileToPsram(sd_path.c_str(), &buf, &len)) {
+            // 尝试兼容查找（大小写与 8.3 短名）
+            std::string any = FindFaceJsonInDir(theme_dir);
+            if (!any.empty()) {
+                ESP_LOGI(TAG, "Try SD face(any): %s", any.c_str());
+                sd_path = any;
+                (void)ReadFileToPsram(sd_path.c_str(), &buf, &len);
             }
         }
-        // 3) 内置
-        if (try_get(face_path)) {
-            (void)ParseFaceJsonBuffer(static_cast<const char*>(ptr), size);
+        if (buf && len > 0) {
+            ESP_LOGI(TAG, "Loading face.json: %s", sd_path.c_str());
+            (void)ParseFaceJsonBuffer(static_cast<const char*>(buf), len);
+            heap_caps_free(buf);
+        } else {
+            ESP_LOGW(TAG, "face.json not found: %s", sd_path.c_str());
+            use_absolute_positions_ = false;
         }
     }
 
@@ -634,7 +471,7 @@ private:
         if (background_loaded_) return;
         background_loaded_ = true;
         
-        // 先尝试从 SD 背景目录构建壁纸列表，并按 JSON 动静态选择默认 1.gif 或 1.png
+        // 优先从 SD 枚举背景列表，支持左右滑动切换；找不到则回退到固定 1.gif/1.png
         if (BuildBackgroundList()) {
             int def = -1;
             // 读取上次选中的壁纸（按主题名区分）
@@ -661,24 +498,15 @@ private:
             if (def < 0) def = 0;
             current_bg_index_ = def;
             LoadBackgroundByIndex(current_bg_index_);
-            SetLoopMode(loop_mode_);
+        SetLoopMode(loop_mode_);
             return;
         }
 
-        // 回退：直接尝试 1.gif/1.png；若缺省，再尝试主题根的 bg.*
+        // 回退：仅尝试 clock/<face>/bg/1.gif 或 1.png
         {
             std::string base = std::string("clock/") + active_face_name_ + "/bg/";
-            // 增加对扁平化打包名的兜底（clock_face_core会递归LoadBackground，这里只尝试规范路径）
             if (!(use_gif_background_ ? LoadBackground(base + "1.gif") : LoadBackground(base + "1.png"))) {
-                // 再兜底一个候选
-                if (!LoadBackground(base + (use_gif_background_ ? "1.png" : "1.gif"))) {
-                    // 最后尝试主题根目录常见命名
-            std::string theme_base = std::string("clock/") + active_face_name_ + "/";
-            static const char* kRootBg[] = {"bg.gif","bg.png"};
-                    for (const char* fn : kRootBg) {
-                        if (LoadBackground(theme_base + fn)) break;
-                    }
-                }
+                (void)LoadBackground(base + (use_gif_background_ ? "1.png" : "1.gif"));
             }
             SetLoopMode(loop_mode_);
         }
@@ -780,11 +608,11 @@ private:
                 lv_event_stop_processing(e);
             } else if (code == LV_EVENT_SHORT_CLICKED) {
                 // 短按：重播 GIF（不进入切换）
-                if (self->gif_ && self->gif_->IsLoaded()) {
-                    self->gif_->Stop();
-                    self->SetLoopMode(self->loop_mode_);
-                    self->gif_->Start();
-                }
+                    if (self->gif_ && self->gif_->IsLoaded()) {
+                        self->gif_->Stop();
+                        self->SetLoopMode(self->loop_mode_);
+                        self->gif_->Start();
+                    }
                 lv_event_stop_bubbling(e);
                 lv_event_stop_processing(e);
             } else if (code == LV_EVENT_LONG_PRESSED) {
@@ -796,7 +624,6 @@ private:
                 lv_event_stop_processing(e);
             } else if (code == LV_EVENT_GESTURE) {
                 // 左右滑动：切换当前主题下的壁纸
-                // 取消额外抖动限制，依靠 LVGL 自身手势判定
                 lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
                 if (dir == LV_DIR_LEFT) {
                     self->NextBackground();
@@ -865,58 +692,32 @@ private:
     }
 
     static bool LoadImageTo(std::unique_ptr<LvglImage>& out_img, const std::string& path_png) {
-        void* ptr = nullptr; size_t size = 0; auto& assets = Assets::GetInstance();
-        // 尝试完整路径 -> @前缀 -> 斜杠转下划线 -> basename
+        // 仅支持 SD：将 "clock/<face>/..." 映射为 "/sdcard/clock/<face>/..."
         std::string n1 = path_png; for (auto &ch : n1) if (ch == '\\') ch = '/';
-        std::string matched_key;
-        // 先尝试 SD 文件
-        {
-            // 从 path_png 截出相对路径 clock/<face>/...
-            const std::string prefix = "clock/";
-            if (n1.rfind(prefix, 0) == 0) {
-                std::string base_dir = ResolveSdClockFacesDir();
-                std::string rel = n1.substr(prefix.size());
-                std::string sd_path = base_dir + "/" + rel;
-                std::string data;
-                if (Assets::ReadFileFromSd(sd_path.c_str(), data)) {
-                    void* copy_buf = heap_caps_malloc(data.size(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-                    if (copy_buf) memcpy(copy_buf, data.data(), data.size());
-                    out_img = std::make_unique<LvglAllocatedImage>(copy_buf, data.size());
-                    if (out_img->image_dsc()) {
-                        ESP_LOGI(TAG, "Digit image loaded from SD: %s", sd_path.c_str());
-                        return true;
-                    }
-                    out_img.reset();
-                }
-            }
-        }
-        auto try_key = [&](const std::string& key)->bool{
-            // 直接键
-            if (assets.GetAssetData(key, ptr, size)) { matched_key = key; return true; }
-            // @前缀
-            if (assets.GetAssetData(std::string("@")+key, ptr, size)) { matched_key = std::string("@")+key; return true; }
-            // assets/ 前缀
-            if (assets.GetAssetData(std::string("assets/")+key, ptr, size)) { matched_key = std::string("assets/")+key; return true; }
-            // 扁平化：clock/... -> clock_...
-            std::string flat = key; for (auto &ch : flat) if (ch == '/') ch = '_';
-            if (assets.GetAssetData(flat, ptr, size)) { matched_key = flat; return true; }
-            if (assets.GetAssetData(std::string("assets/")+flat, ptr, size)) { matched_key = std::string("assets/")+flat; return true; }
+        const std::string prefix = "clock/";
+        if (n1.rfind(prefix, 0) != 0) {
+            ESP_LOGE(TAG, "Invalid virtual path for digit: %s", path_png.c_str());
             return false;
-        };
-        bool ok = try_key(n1);
-        if (ok) {
-            try {
-                // 将数字图片也改为可释放缓冲，避免跨主题缓存/指针残留
-                void* copy_buf = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-                if (copy_buf) memcpy(copy_buf, ptr, size);
-                out_img = std::make_unique<LvglAllocatedImage>(copy_buf, size);
-                ESP_LOGI(TAG, "Digit image loaded, key=%s", matched_key.c_str());
-                return true;
-            } catch (...) {
-                out_img.reset();
-            }
         }
-        ESP_LOGW(TAG, "Digit asset not found (compat search): %s", path_png.c_str());
+        std::string rel = n1.substr(prefix.size());
+        std::string sd_path = ResolveSdClockFacesDir() + "/" + rel;
+        void* file_buf = nullptr; size_t file_sz = 0;
+        if (!ReadFileToPsram(sd_path.c_str(), &file_buf, &file_sz)) {
+            ESP_LOGW(TAG, "Digit image not found on SD: %s", sd_path.c_str());
+            return false;
+        }
+        try {
+            out_img = std::make_unique<LvglAllocatedImage>(file_buf, file_sz);
+            if (out_img && out_img->image_dsc()) {
+                ESP_LOGI(TAG, "Digit image loaded from SD: %s", sd_path.c_str());
+                return true;
+            }
+            } catch (...) {
+            // fallthrough
+            }
+        if (file_buf) heap_caps_free(file_buf);
+        out_img.reset();
+        ESP_LOGW(TAG, "Digit image decode failed: %s", sd_path.c_str());
         return false;
     }
 
@@ -927,6 +728,9 @@ private:
         if (!tm_info || tm_info->tm_year < 2025 - 1900) return;
         int h = tm_info->tm_hour;
         int m = tm_info->tm_min;
+        static int last_h = -1, last_m = -1;
+        if (last_h == h && last_m == m) return; // 分钟未变化，跳过刷新
+        last_h = h; last_m = m;
         int d0 = h / 10;
         int d1 = h % 10;
         int d2 = m / 10;
@@ -1105,6 +909,25 @@ private:
 
 private:
     static constexpr const char* TAG = "ClockFace";
+
+    // 直接将文件读入 PSRAM，避免在内部 RAM 产生临时副本
+    static bool ReadFileToPsram(const char* path, void** out_buf, size_t* out_size) {
+        if (!path || !out_buf || !out_size) return false;
+        FILE* f = fopen(path, "rb");
+        if (!f) return false;
+        if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return false; }
+        long len = ftell(f);
+        if (len <= 0) { fclose(f); return false; }
+        if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return false; }
+        void* buf = heap_caps_malloc((size_t)len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!buf) { fclose(f); return false; }
+        size_t n = fread(buf, 1, (size_t)len, f);
+        fclose(f);
+        if (n != (size_t)len) { heap_caps_free(buf); return false; }
+        *out_buf = buf;
+        *out_size = (size_t)len;
+        return true;
+    }
     // 生成短键用于 NVS（避免超过 15 字节限制）：cb_<8hex>
     static std::string MakeBgKeyForTheme(const std::string& theme) {
         uint32_t h = 2166136261u; // FNV-1a 32-bit
@@ -1320,6 +1143,8 @@ private:
                 }
             }
             LoadBackgroundIfNeeded();
+            // 背景加载后短暂让出 CPU，提升后续小文件读取/渲染的流畅度
+            vTaskDelay(pdMS_TO_TICKS(50));
             // 强制预热当前时间需要的数字，避免首次不完整
             {
                 time_t now = time(NULL);
@@ -1402,25 +1227,11 @@ private:
         // 解析实际主题目录，避免大小写差异
         std::string theme_dir = ResolveSdThemeDir(base_dir, active_face_name_);
         std::string dir = theme_dir + "/bg";
-        DIR* d = opendir(dir.c_str());
-        if (!d) {
-            // 兼容大小写与 8.3：在主题目录下查找以 background/backgr 开头的目录
-            DIR* td = opendir(theme_dir.c_str());
-            if (!td) return false;
-            struct dirent* e;
-            while ((e = readdir(td)) != nullptr) {
-                const char* n = e->d_name; if (!n || n[0]=='.') continue;
-                std::string sub = theme_dir + "/" + n;
-                DIR* test = opendir(sub.c_str());
-                if (!test) continue; // 不是目录
-                closedir(test);
-                std::string lower = n; for (auto &c : lower) c = (char)tolower((unsigned char)c);
-                if (lower == "bg") { dir = sub; break; }
-            }
-            closedir(td);
-            d = opendir(dir.c_str());
-            if (!d) return false;
-        }
+		DIR* d = opendir(dir.c_str());
+		if (!d) {
+			ESP_LOGW(TAG, "Background directory not found: %s", dir.c_str());
+			return false;
+		}
         theme_dir_sd_ = theme_dir;
         bg_dir_sd_ = dir;
         auto is_img = [](const char* fn) {

@@ -1,7 +1,6 @@
 #include "wifi_board.h"
 
 #include "display.h"
-#include "display/lcd_display.h"
 #include "application.h"
 #include "system_info.h"
 #include "settings.h"
@@ -105,14 +104,6 @@ void WifiBoard::StartNetwork() {
         std::string notification = Lang::Strings::CONNECTED_TO;
         notification += ssid;
         display->ShowNotification(notification.c_str(), 30000);
-        // 将 UI 切换安排到应用主线程，避免在 WiFi 事件线程直接触碰 LVGL 导致异常
-        Application::GetInstance().Schedule([](){
-            auto display = Board::GetInstance().GetDisplay();
-            if (display) {
-                // 触发状态刷新，内部会在正确时机进入时钟界面
-                display->UpdateStatusBar(true);
-            }
-        });
     });
     wifi_station.Start();
 

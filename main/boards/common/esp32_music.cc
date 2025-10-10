@@ -561,25 +561,18 @@ bool Esp32Music::StartStreaming(const std::string& music_url) {
         vTaskDelay(pdMS_TO_TICKS(50));
     }
     
-    // 停止之前的播放和下载
+    // 停止标志并通知可能等待的线程（下载/播放/歌词）
     is_downloading_ = false;
     is_playing_ = false;
-    
-    // 等待之前的线程完全结束
-    if (download_thread_.joinable()) {
-        {
-            std::lock_guard<std::mutex> lock(buffer_mutex_);
-            buffer_cv_.notify_all();  // 通知线程退出
-        }
-        download_thread_.join();
+    is_lyric_running_ = false;
+    {
+        std::lock_guard<std::mutex> lock(buffer_mutex_);
+        buffer_cv_.notify_all();
     }
-    if (play_thread_.joinable()) {
-        {
-            std::lock_guard<std::mutex> lock(buffer_mutex_);
-            buffer_cv_.notify_all();  // 通知线程退出
-        }
-        play_thread_.join();
-    }
+    // 在启动新线程前，确保所有旧线程都已清理，避免对 joinable() 线程赋值触发 std::terminate
+    SafeJoinThread(lyric_thread_, "old-lyric");
+    SafeJoinThread(download_thread_, "old-download");
+    SafeJoinThread(play_thread_, "old-play", 500);
     
     // 清空缓冲区
     ClearAudioBuffer();
@@ -653,27 +646,13 @@ bool Esp32Music::StopStreaming() {
         SafeJoinThread(lyric_thread_, "lyric");
     }
     
-    // 等待下载线程结束
+    // 等待下载、播放、歌词线程结束
     SafeJoinThread(download_thread_, "download");
+    SafeJoinThread(play_thread_, "play", 1000); // 1秒超时
+    SafeJoinThread(lyric_thread_, "lyric");
     
-    // 等待播放线程结束
-    if (play_thread_.joinable()) {
-        // 先设置停止标志并通知条件变量，确保线程能够退出
-        is_playing_ = false;
-        {
-            std::lock_guard<std::mutex> lock(buffer_mutex_);
-            buffer_cv_.notify_all();
-        }
-        
-        SafeJoinThread(play_thread_, "play", 1000); // 1秒超时
-    }
-    
-    // 重置MP3解码器状态，避免下次播放时有残留声音
-    if (mp3_decoder_initialized_) {
-        MP3FreeDecoder(mp3_decoder_);
-        mp3_decoder_initialized_ = false;
-        ESP_LOGI(TAG, "MP3 decoder freed and reset");
-    }
+    // 统一在这里清理解码器（线程都结束后更安全）
+    CleanupMp3Decoder();
     
     // 清理音频缓冲区
     ClearAudioBuffer();
