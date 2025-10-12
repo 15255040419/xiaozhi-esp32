@@ -40,8 +40,6 @@ public:
 
     ClockFaceCore(lv_obj_t* parent, int width, int height)
         : parent_(parent), width_(width), height_(height) {
-        // 先加载配置（仅解析JSON，不加载资源）
-        LoadFaceConfig();
         CreateUI();
     }
 
@@ -84,6 +82,8 @@ public:
     }
 
     void Show() {
+        // 进入时钟界面：强制下一次时间刷新，避免等待到下一个整分钟
+        last_h_ = -1; last_m_ = -1; force_time_refresh_ = true;
         // 不插卡：完全不显示时钟界面
         if (!IsSdMounted()) {
             g_clock_face_active = false;
@@ -138,6 +138,8 @@ public:
         if (gif_) gif_->Start();
         // 给底层 I/O 与任务切换一个短暂喘息，避免紧接着的小图读取受阻
         vTaskDelay(pdMS_TO_TICKS(50));
+        // 确保首帧强制刷新
+        force_time_refresh_ = true;
         EnsureDigitsLoaded();
         StartTick();
         UpdateTime();
@@ -176,8 +178,8 @@ public:
     static bool IsSdMounted() {
         DIR* root = opendir("/sdcard");
         if (root) { closedir(root); return true; }
-        return false;
-    }
+            return false;
+        }
 
     // 在 SD 的 clock_faces 目录下解析实际主题目录（大小写不敏感）
     static std::string ResolveSdThemeDir(const std::string& base_dir, const std::string& theme_name) {
@@ -223,17 +225,17 @@ public:
         if (!background_img_) return false;
         if (bg_name.empty()) {
             lv_obj_add_flag(background_img_, LV_OBJ_FLAG_HIDDEN);
-            return true;
-        }
+        return true;
+    }
 
         // 在加载新背景前，安全清理当前背景资源与缓存，保证与时间渲染解耦
         {
-            if (gif_) gif_->Stop();
-            if (gif_sd_buf_) { heap_caps_free(gif_sd_buf_); gif_sd_buf_ = nullptr; gif_sd_size_ = 0; }
+        if (gif_) gif_->Stop();
+        if (gif_sd_buf_) { heap_caps_free(gif_sd_buf_); gif_sd_buf_ = nullptr; gif_sd_size_ = 0; }
             const void* prev = lv_image_get_src(background_img_);
             if (prev) lv_image_cache_drop(prev);
             lv_image_set_src(background_img_, NULL);
-            background_image_.reset();
+        background_image_.reset();
             gif_.reset();
         }
 
@@ -246,7 +248,7 @@ public:
             const std::string prefix = "clock/";
             if (rel.rfind(prefix, 0) != 0) {
                 ESP_LOGE(TAG, "Invalid background path format: %s", bg_name.c_str());
-                return false;
+            return false;
             }
             rel = rel.substr(prefix.size());
             std::string face_dir = rel;
@@ -264,8 +266,8 @@ public:
             if (ProcessBackgroundImageData(file_buf, file_sz)) return true;
         }
         ESP_LOGW(TAG, "Background not found on SD: %s", absolute_sd_path.c_str());
-        return false;
-    }
+            return false;
+        }
 
 private:
     // 共享背景候选名（优先 gif，再 png，再 jpg）
@@ -309,9 +311,9 @@ private:
         try {
             background_image_ = std::make_unique<LvglAllocatedImage>(file_buf, file_sz);
             if (background_image_ && background_image_->image_dsc()) {
-                lv_image_set_src(background_img_, background_image_->image_dsc());
-                lv_obj_clear_flag(background_img_, LV_OBJ_FLAG_HIDDEN);
-                return true;
+            lv_image_set_src(background_img_, background_image_->image_dsc());
+            lv_obj_clear_flag(background_img_, LV_OBJ_FLAG_HIDDEN);
+            return true;
             }
         } catch (...) {
             ESP_LOGE(TAG, "Background static image decode failed");
@@ -320,7 +322,7 @@ private:
         background_image_.reset();
         return false;
     }
-
+    
         // 统一解析 face.json 内容
     bool ParseFaceJsonBuffer(const char* buf, size_t len) {
         if (!buf || len == 0) return false;
@@ -476,16 +478,16 @@ private:
             int def = -1;
             // 读取上次选中的壁纸（按主题名区分）
             {
-                Settings s("display", false);
-                std::string key = MakeBgKeyForTheme(active_face_name_);
-                std::string saved = s.GetString(key.c_str(), "");
-                if (!saved.empty()) {
+            Settings s("display", false);
+            std::string key = MakeBgKeyForTheme(active_face_name_);
+            std::string saved = s.GetString(key.c_str(), "");
+            if (!saved.empty()) {
                     std::string saved_lower = saved; for (auto &c : saved_lower) c = (char)tolower((unsigned char)c);
-                    for (int i = 0; i < (int)bg_files_.size(); ++i) {
+                for (int i = 0; i < (int)bg_files_.size(); ++i) {
                         std::string lower = bg_files_[i]; for (auto &c : lower) c = (char)tolower((unsigned char)c);
                         if (lower == saved_lower) { def = i; break; }
-                    }
                 }
+            }
             }
             // 若无记录或记录缺失，优先 1.gif 或 1.png
             if (def < 0) {
@@ -496,8 +498,8 @@ private:
                 }
             }
             if (def < 0) def = 0;
-            current_bg_index_ = def;
-            LoadBackgroundByIndex(current_bg_index_);
+                current_bg_index_ = def;
+                LoadBackgroundByIndex(current_bg_index_);
         SetLoopMode(loop_mode_);
             return;
         }
@@ -507,8 +509,8 @@ private:
             std::string base = std::string("clock/") + active_face_name_ + "/bg/";
             if (!(use_gif_background_ ? LoadBackground(base + "1.gif") : LoadBackground(base + "1.png"))) {
                 (void)LoadBackground(base + (use_gif_background_ ? "1.png" : "1.gif"));
-            }
-            SetLoopMode(loop_mode_);
+        }
+        SetLoopMode(loop_mode_);
         }
     }
 
@@ -649,7 +651,7 @@ private:
         }
         tick_timer_ = lv_timer_create(
             [](lv_timer_t* timer){
-                auto self = static_cast<ClockFaceCore*>(lv_timer_get_user_data(timer));
+            auto self = static_cast<ClockFaceCore*>(lv_timer_get_user_data(timer));
                 if (!self) return;
                 self->UpdateTime();
                 if (!self->timer_aligned_) {
@@ -670,56 +672,94 @@ private:
     }
 
     void EnsureDigitsLoaded() {
-        if (digits_loaded_) return;
-        if (use_text_time_) { // 文本时间模式：不加载数字图片
-            digits_loaded_ = true;
-            return;
+        if (digits_loaded_ || use_text_time_) return;
+        if (digits_preloading_) return;
+        ESP_LOGI(TAG, "Pre-loading all digit images (async)...");
+        digits_preloading_ = true;
+        digits_preload_index_ = -1; // 先预加载冒号，再加载 0-9
+        digits_preload_timer_ = lv_timer_create([](lv_timer_t* t){
+            auto self = static_cast<ClockFaceCore*>(lv_timer_get_user_data(t));
+            if (!self) return;
+            int processed = 0;
+            while (processed < self->digits_preload_batch_) {
+                // 计算下一个要加载的索引：-1 表示冒号，0-9 表示数字
+                int idx = self->digits_preload_index_;
+                if (idx == -1) {
+                    self->LoadColonIfNeeded();
+                    self->digits_preload_index_ = 0;
+                    processed++;
+                } else if (idx >= 0 && idx <= 9) {
+                    self->LoadDigitIfNeeded(idx);
+                    self->digits_preload_index_++;
+                    processed++;
+                } else {
+                    break;
+                }
+            }
+            // 判断是否完成
+            if (self->digits_preload_index_ > 9) {
+                self->digits_loaded_ = true;
+                self->digits_preloading_ = false;
+                // 预加载完成后缩小全局缓存，降低常驻占用
+                lv_image_cache_resize(512 * 1024, true);
+                // 触发一次 UI 更新，切换到图片显示
+                self->force_time_refresh_ = true;
+                self->UpdateTime();
+                lv_timer_del(t);
+                self->digits_preload_timer_ = nullptr;
+            }
+        }, 20, this);
+    }
+
+    // 加载一个数字图片（若尚未加载）
+    void LoadDigitIfNeeded(int d) {
+        if (d < 0 || d > 9) return;
+        if (digit_images_[d] && digit_images_[d]->image_dsc()) return;
+        std::string path = MakeNumberPath(d);
+        void* file_buf = nullptr; size_t file_sz = 0;
+        if (ReadFileToPsram(path.c_str(), &file_buf, &file_sz)) {
+            try {
+                auto img = std::make_unique<LvglAllocatedImage>(file_buf, file_sz);
+                if (img && img->image_dsc()) {
+                    digit_images_[d] = std::move(img);
+            } else {
+                    if (file_buf) heap_caps_free(file_buf);
+                }
+            } catch (...) {
+                if (file_buf) heap_caps_free(file_buf);
+            }
         }
-        // 懒加载：尝试加载冒号（仅当前主题提供则显示；不回退到其它主题）
-        if (!colon_image_ || !colon_image_->image_dsc()) {
-            (void)LoadImageTo(colon_image_, MakeColonPath());
+    }
+
+    // 加载冒号图片（若尚未加载）
+    void LoadColonIfNeeded() {
+        if (colon_image_ && colon_image_->image_dsc()) return;
+        std::string path = MakeColonPath();
+        void* file_buf = nullptr; size_t file_sz = 0;
+        if (ReadFileToPsram(path.c_str(), &file_buf, &file_sz)) {
+            try {
+                auto img = std::make_unique<LvglAllocatedImage>(file_buf, file_sz);
+                if (img && img->image_dsc()) {
+                    colon_image_ = std::move(img);
+                } else {
+                    if (file_buf) heap_caps_free(file_buf);
+                }
+            } catch (...) {
+                if (file_buf) heap_caps_free(file_buf);
+            }
         }
-        digits_loaded_ = true;
     }
 
     std::string MakeNumberPath(int d) const {
         char buf[128];
-        snprintf(buf, sizeof(buf), "clock/%s/number/%d.png", active_face_name_.c_str(), d);
+        snprintf(buf, sizeof(buf), "%s/%s/number/%d.png", 
+                ResolveSdClockFacesDir().c_str(), active_face_name_.c_str(), d);
         return std::string(buf);
     }
     std::string MakeColonPath() const {
-        return std::string("clock/") + active_face_name_ + "/number/colon.png";
+        return ResolveSdClockFacesDir() + "/" + active_face_name_ + "/number/colon.png";
     }
 
-    static bool LoadImageTo(std::unique_ptr<LvglImage>& out_img, const std::string& path_png) {
-        // 仅支持 SD：将 "clock/<face>/..." 映射为 "/sdcard/clock/<face>/..."
-        std::string n1 = path_png; for (auto &ch : n1) if (ch == '\\') ch = '/';
-        const std::string prefix = "clock/";
-        if (n1.rfind(prefix, 0) != 0) {
-            ESP_LOGE(TAG, "Invalid virtual path for digit: %s", path_png.c_str());
-            return false;
-        }
-        std::string rel = n1.substr(prefix.size());
-        std::string sd_path = ResolveSdClockFacesDir() + "/" + rel;
-        void* file_buf = nullptr; size_t file_sz = 0;
-        if (!ReadFileToPsram(sd_path.c_str(), &file_buf, &file_sz)) {
-            ESP_LOGW(TAG, "Digit image not found on SD: %s", sd_path.c_str());
-            return false;
-        }
-        try {
-            out_img = std::make_unique<LvglAllocatedImage>(file_buf, file_sz);
-            if (out_img && out_img->image_dsc()) {
-                ESP_LOGI(TAG, "Digit image loaded from SD: %s", sd_path.c_str());
-                return true;
-            }
-            } catch (...) {
-            // fallthrough
-            }
-        if (file_buf) heap_caps_free(file_buf);
-        out_img.reset();
-        ESP_LOGW(TAG, "Digit image decode failed: %s", sd_path.c_str());
-        return false;
-    }
 
     void UpdateTime() {
         EnsureDigitsLoaded();
@@ -728,25 +768,11 @@ private:
         if (!tm_info || tm_info->tm_year < 2025 - 1900) return;
         int h = tm_info->tm_hour;
         int m = tm_info->tm_min;
-        static int last_h = -1, last_m = -1;
-        if (last_h == h && last_m == m) return; // 分钟未变化，跳过刷新
-        last_h = h; last_m = m;
-        int d0 = h / 10;
-        int d1 = h % 10;
-        int d2 = m / 10;
-        int d3 = m % 10;
+        if (!force_time_refresh_ && last_h_ == h && last_m_ == m) return;
+        last_h_ = h; last_m_ = m;
+        force_time_refresh_ = false;
+        int d0 = h / 10, d1 = h % 10, d2 = m / 10, d3 = m % 10;
 
-        // 懒加载：先确保当前4个数字贴图可用
-        {
-            int need[4] = { d0, d1, d2, d3 };
-            for (int i = 0; i < 4; ++i) {
-                int d = need[i];
-                if (!digit_images_[d]) {
-                    (void)LoadImageTo(digit_images_[d], MakeNumberPath(d));
-                }
-            }
-        }
-        // 检查4位数字是否都可用（不需要冒号）
         bool digits_ok =
             digit_images_[d0] && digit_images_[d0]->image_dsc() &&
             digit_images_[d1] && digit_images_[d1]->image_dsc() &&
@@ -784,12 +810,12 @@ private:
             }
             // flower 主题：显示日期（默认字体），位于时间数字下方（大小写不敏感）
             {
-                std::string n = active_face_name_;
-                for (auto &c : n) c = (char)tolower((unsigned char)c);
+            std::string n = active_face_name_;
+            for (auto &c : n) c = (char)tolower((unsigned char)c);
                 if (n == "flower") UpdateAndShowDate(tm_info, /*is_digits_mode=*/true);
                 else { if (date_text_) lv_obj_add_flag(date_text_, LV_OBJ_FLAG_HIDDEN); if (date_line_) lv_obj_add_flag(date_line_, LV_OBJ_FLAG_HIDDEN); }
-            }
-        } else {
+                }
+            } else {
             // 降级到字体渲染，确保不空白
             char buf[8];
             snprintf(buf, sizeof(buf), "%02d:%02d", h, m);
@@ -810,8 +836,8 @@ private:
                 std::string n = active_face_name_;
                 for (auto &c : n) c = (char)tolower((unsigned char)c);
                 if (n == "flower") UpdateAndShowDate(tm_info, /*is_digits_mode=*/false);
-                else { if (date_text_) lv_obj_add_flag(date_text_, LV_OBJ_FLAG_HIDDEN); if (date_line_) lv_obj_add_flag(date_line_, LV_OBJ_FLAG_HIDDEN); }
-            }
+            else { if (date_text_) lv_obj_add_flag(date_text_, LV_OBJ_FLAG_HIDDEN); if (date_line_) lv_obj_add_flag(date_line_, LV_OBJ_FLAG_HIDDEN); }
+        }
             // 隐藏图片层以避免覆盖
             for (int i = 0; i < 5; ++i) {
                 if (digit_img_[i]) lv_obj_add_flag(digit_img_[i], LV_OBJ_FLAG_HIDDEN);
@@ -878,10 +904,7 @@ private:
     void SetDigit(int pos, int d) {
         if (pos < 0 || pos >= 5 || d < 0 || d > 9) return;
         if (!digit_img_[pos]) return;  // 确保 UI 对象存在
-        // 懒加载：需要时加载对应数字
-        if (!digit_images_[d]) {
-            (void)LoadImageTo(digit_images_[d], MakeNumberPath(d));
-        }
+        
         if (!digit_images_[d] || !digit_images_[d]->image_dsc()) {
             // 不隐藏，保留上一次的贴图，避免出现缺位
             ESP_LOGW(TAG, "Digit %d image not ready; keep previous at pos %d", d, pos);
@@ -902,8 +925,8 @@ private:
         // 将 pos_ 中的相对中心位移应用到每个 digit_img_
         for (int i = 0; i < 5; ++i) {
             lv_obj_align(digit_img_[i], LV_ALIGN_CENTER, pos_[i][0], pos_[i][1]);
+            }
         }
-    }
 
     // 取消数字缩放：保持图片原始尺寸
 
@@ -914,7 +937,10 @@ private:
     static bool ReadFileToPsram(const char* path, void** out_buf, size_t* out_size) {
         if (!path || !out_buf || !out_size) return false;
         FILE* f = fopen(path, "rb");
-        if (!f) return false;
+        if (!f) {
+            ESP_LOGE(TAG, "ReadFileToPsram: Failed to open file '%s'", path);
+            return false;
+        }
         if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return false; }
         long len = ftell(f);
         if (len <= 0) { fclose(f); return false; }
@@ -952,28 +978,19 @@ private:
     int current_face_index_ = -1;     // 正在使用
     int preview_face_index_ = -1;     // 预览中的
     bool touch_active_ = false;       // 切换界面内是否有手指按住/滑动
-    uint32_t last_interaction_tick_ = 0; // 最近一次交互的 tick
-    // 长按与滑动判定辅助
-    int press_x_ = 0;
-    int press_y_ = 0;
-    uint32_t press_tick_ = 0;
-    bool moved_significantly_ = false;
-    const int move_threshold_px_ = 14; // 超过该位移则优先判定为滑动
-    // 移除 gesture 锁，依靠 LVGL 手势事件
-    bool tap_pending_ = false;        // 判断是否是一次短按
-    bool long_pressed_detected_ = false; // 是否检测到长按
-    lv_obj_t* confirm_btn_ = nullptr;
-    lv_obj_t* cancel_btn_ = nullptr;  // 预留（当前未显示）
-    lv_obj_t* face_name_label_ = nullptr; // 预留（当前未使用）
-    lv_obj_t* roller_ = nullptr;      // 主题滚轮
-    lv_timer_t* auto_confirm_timer_ = nullptr; // 3s 无操作自动确认
-    std::string active_before_switch_;
+     // 长按与滑动判定辅助
+     int press_x_ = 0;
+     int press_y_ = 0;
+     uint32_t press_tick_ = 0;
+     bool moved_significantly_ = false;
+     const int move_threshold_px_ = 14; // 超过该位移则优先判定为滑动
+     lv_obj_t* roller_ = nullptr;      // 主题滚轮
+     lv_timer_t* auto_confirm_timer_ = nullptr; // 3s 无操作自动确认
 
     void EnterSwitchMode() {
         if (switch_mode_) return;
         switch_mode_ = true;
         ESP_LOGI(TAG, "EnterSwitchMode: open theme roller");
-        active_before_switch_ = active_face_name_;
         // 不再缩放容器，保持原尺寸
         // 去除阴影框，避免出现“两个框”的观感
         lv_obj_set_style_shadow_width(container_, 0, 0);
@@ -1081,13 +1098,6 @@ private:
         // 恢复原背景可见（由确认流程最终决定显示内容）
     }
 
-    void NextFace() { if (!switch_mode_ || faces_.empty()) return; preview_face_index_ = (preview_face_index_ + 1) % faces_.size(); PreviewFace(faces_[preview_face_index_]); }
-    void PrevFace() { if (!switch_mode_ || faces_.empty()) return; preview_face_index_ = (preview_face_index_ - 1 + faces_.size()) % faces_.size(); PreviewFace(faces_[preview_face_index_]); }
-
-    void PreviewFace(const std::string& name) {
-        // 改为滚轮 UI，不做图片预览，仅更新选中索引由滚轮事件处理。
-        (void)name;
-    }
 
     void ConfirmSwitch() {
         if (!switch_mode_) return;
@@ -1145,24 +1155,12 @@ private:
             LoadBackgroundIfNeeded();
             // 背景加载后短暂让出 CPU，提升后续小文件读取/渲染的流畅度
             vTaskDelay(pdMS_TO_TICKS(50));
-            // 强制预热当前时间需要的数字，避免首次不完整
-            {
-                time_t now = time(NULL);
-                struct tm* tm_info = localtime(&now);
-                if (tm_info) {
-                    int h = tm_info->tm_hour, m = tm_info->tm_min;
-                    int need[4] = { h/10, h%10, m/10, m%10 };
-                    for (int i = 0; i < 4; ++i) {
-                        int d = need[i];
-                        if (!digit_images_[d] || !digit_images_[d]->image_dsc()) {
-                            (void)LoadImageTo(digit_images_[d], MakeNumberPath(d));
-                        }
-                    }
-                    if (!colon_image_ || !colon_image_->image_dsc()) {
-                        (void)LoadImageTo(colon_image_, MakeColonPath());
-                    }
-                }
-            }
+            // 主题切换后强制下一次显示时间（不等待整分钟）
+            last_h_ = -1;
+            last_m_ = -1;
+            force_time_refresh_ = true;
+            // 预加载数字与冒号（纯内存操作，避免首次显示不完整）
+            EnsureDigitsLoaded();
             // 首帧强制渲染完整时间
             UpdateTime();
             // 统一再应用一次坐标，确保冒号与数字同步
@@ -1220,6 +1218,16 @@ private:
     int current_bg_index_ = -1;
     std::string theme_dir_sd_;
     std::string bg_dir_sd_;
+    // 时间刷新控制：用成员而非静态，避免跨主题切换被旧值抑制
+    int last_h_ = -1;
+    int last_m_ = -1;
+    bool force_time_refresh_ = false;
+
+    // 数字图片异步预加载
+    bool digits_preloading_ = false;
+    int digits_preload_index_ = -1; // -1: colon, 0-9: digits
+    int digits_preload_batch_ = 3;  // 每 tick 加载数量
+    lv_timer_t* digits_preload_timer_ = nullptr;
 
     bool BuildBackgroundList() {
         bg_files_.clear(); current_bg_index_ = -1; theme_dir_sd_.clear();

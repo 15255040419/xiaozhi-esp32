@@ -1051,7 +1051,14 @@ void Esp32Music::PlayAudioStream() {
         }
         
         // 解码MP3帧
-        int16_t pcm_buffer[2304];
+        // 将解码输出缓冲改为堆上分配，降低任务栈占用
+        static const int kPcmSamples = 2304;
+        int16_t* pcm_buffer = (int16_t*)heap_caps_malloc(kPcmSamples * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+        if (!pcm_buffer) {
+            ESP_LOGE(TAG, "Failed to allocate pcm_buffer");
+            is_playing_ = false;
+            break;
+        }
         int decode_result = MP3Decode(mp3_decoder_, &read_ptr, &bytes_left, pcm_buffer, 0);
         
         if (decode_result == 0) {
@@ -1129,7 +1136,7 @@ void Esp32Music::PlayAudioStream() {
                 // 将int16_t PCM数据转换为uint8_t字节数组
                 size_t pcm_size_bytes = final_sample_count * sizeof(int16_t);
                 packet.payload.resize(pcm_size_bytes);
-                memcpy(packet.payload.data(), final_pcm_data, pcm_size_bytes);
+                 memcpy(packet.payload.data(), final_pcm_data, pcm_size_bytes);
 
                 if (final_pcm_data_fft == nullptr) {
                     final_pcm_data_fft = (int16_t*)heap_caps_malloc(
@@ -1173,6 +1180,7 @@ void Esp32Music::PlayAudioStream() {
                     bytes_left = 0;
             }
         }
+        heap_caps_free(pcm_buffer);
     }
     
     // MP3缓冲区由RAII自动清理，无需手动释放
