@@ -666,6 +666,36 @@ void Application::SetListeningMode(ListeningMode mode) {
     SetDeviceState(kDeviceStateListening);
 }
 
+// UI Mode management functions
+void Application::ShowChatInterface() {
+    auto& board = Board::GetInstance();
+    auto display = board.GetDisplay();
+    if (auto lcd_display = dynamic_cast<LcdDisplay*>(display)) {
+        lcd_display->ShowChatInterface();
+    }
+}
+
+void Application::ShowClockInterface() {
+    auto& board = Board::GetInstance();
+    auto display = board.GetDisplay();
+    if (auto lcd_display = dynamic_cast<LcdDisplay*>(display)) {
+        if (lcd_display->CanShowClockFace()) {
+            lcd_display->ShowClockFace();
+        } else {
+            // 如果不能显示时钟（如SD卡未挂载或WiFi未连接），显示聊天界面
+            lcd_display->ShowChatInterface();
+        }
+    }
+}
+
+void Application::ShowMusicInterface() {
+    auto& board = Board::GetInstance();
+    auto display = board.GetDisplay();
+    if (auto lcd_display = dynamic_cast<LcdDisplay*>(display)) {
+        lcd_display->ShowMusicPlayer();
+    }
+}
+
 void Application::SetDeviceState(DeviceState state) {
     if (device_state_ == state) {
         return;
@@ -685,13 +715,11 @@ void Application::SetDeviceState(DeviceState state) {
     led->OnStateChanged();
 
     // 当从idle状态变成其他任何状态时，停止所有音乐（语音唤醒/手动打断）
-    // 无论音乐是播放还是暂停状态，都需要完全停止以确保语音交互正常
     if (previous_state == kDeviceStateIdle && state != kDeviceStateIdle) {
         auto music = board.GetMusic();
         if (music) {
             auto esp32_music = dynamic_cast<Esp32Music*>(music);
             if (esp32_music && esp32_music->IsPlaying()) {
-                // 完全停止音乐，销毁连接（用于语音唤醒和手动打断）
                 ESP_LOGI(TAG, "Stopping music for voice interaction: %s -> %s", 
                         STATE_STRINGS[previous_state], STATE_STRINGS[state]);
                 esp32_music->StopStreaming();
@@ -699,39 +727,59 @@ void Application::SetDeviceState(DeviceState state) {
         }
     }
 
-    // 语音交互结束后，手动暂停的音乐保持暂停状态，被停止的音乐不会自动恢复
-
+    // 根据状态切换界面和功能
     switch (state) {
         case kDeviceStateUnknown:
         case kDeviceStateIdle:
-            display->SetStatus(Lang::Strings::STANDBY);
-            display->SetEmotion("neutral");
-            audio_service_.EnableVoiceProcessing(false);
-            audio_service_.EnableWakeWordDetection(true);
+            // 在空闲状态，根据音乐播放状态决定显示音乐播放器还是时钟
+            {
+                auto music = board.GetMusic();
+                bool is_playing = false;
+                if (music) {
+                    auto esp32_music = dynamic_cast<Esp32Music*>(music);
+                    if (esp32_music) {
+                        is_playing = esp32_music->IsPlaying();
+                    }
+                }
+                
+                if (is_playing) {
+                    ShowMusicInterface();
+                } else {
+                    ShowClockInterface();
+                }
+                
+                display->SetStatus(Lang::Strings::STANDBY);
+                display->SetEmotion("neutral");
+                audio_service_.EnableVoiceProcessing(false);
+                audio_service_.EnableWakeWordDetection(true);
+            }
             break;
+            
         case kDeviceStateConnecting:
+            ShowChatInterface();
             display->SetStatus(Lang::Strings::CONNECTING);
             display->SetEmotion("neutral");
             display->SetChatMessage("system", "");
             break;
+            
         case kDeviceStateListening:
+            ShowChatInterface();
             display->SetStatus(Lang::Strings::LISTENING);
             display->SetEmotion("neutral");
 
-            // Make sure the audio processor is running
             if (!audio_service_.IsAudioProcessorRunning()) {
-                // Send the start listening command
                 protocol_->SendStartListening(listening_mode_);
                 audio_service_.EnableVoiceProcessing(true);
                 audio_service_.EnableWakeWordDetection(false);
             }
             break;
+            
         case kDeviceStateSpeaking:
+            ShowChatInterface();
             display->SetStatus(Lang::Strings::SPEAKING);
 
             if (listening_mode_ != kListeningModeRealtime) {
                 audio_service_.EnableVoiceProcessing(false);
-                // Only AFE wake word can be detected in speaking mode
 #if CONFIG_USE_AFE_WAKE_WORD
                 audio_service_.EnableWakeWordDetection(true);
 #else
@@ -740,8 +788,9 @@ void Application::SetDeviceState(DeviceState state) {
             }
             audio_service_.ResetDecoder();
             break;
+            
         default:
-            // Do nothing
+            // 其他状态保持当前界面
             break;
     }
 }

@@ -1,15 +1,12 @@
 #include "lvgl.h"
-#include <esp_timer.h>
 #include <esp_log.h>
 #include <string>
 #include <memory>
 #include <array>
-#include <set>
 #include <algorithm>
 #include <cJSON.h>
 #include <dirent.h>
 #include <ctype.h>
-#include <limits>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -22,7 +19,6 @@
 #include "settings.h"
 #include "board.h"
 
-// PixelThinking 风格的时钟界面（核心实现，C 接口见底部）
 
 static bool g_clock_face_active = false;
 
@@ -358,6 +354,29 @@ private:
                 auto read_int = [&](const char* key, int &out){ cJSON* n = cJSON_GetObjectItem(root, key); if (cJSON_IsNumber(n)) out = n->valueint; };
         read_int("text_time_y", time_y_offset_);
         read_int("text_date_gap", date_gap_);
+        // 读取日期绝对坐标（可选）
+        // 支持键：pos_date 或 date（数组 [x,y]，以屏幕中心为原点）
+        has_date_pos_ = false;
+        {
+            auto read_xy = [&](const char* key, std::array<int,2>& out) -> bool {
+                cJSON* a = cJSON_GetObjectItem(root, key);
+                if (!a || !cJSON_IsArray(a) || cJSON_GetArraySize(a) != 2) return false;
+                cJSON* x = cJSON_GetArrayItem(a, 0);
+                cJSON* y = cJSON_GetArrayItem(a, 1);
+                if (!cJSON_IsNumber(x) || !cJSON_IsNumber(y)) return false;
+                out[0] = x->valueint; out[1] = y->valueint; return true;
+            };
+            has_date_pos_ = read_xy("pos_date", date_pos_) || read_xy("date", date_pos_);
+        }
+        // show_date: bool or string
+        cJSON* show_d = cJSON_GetObjectItem(root, "show_date");
+        if (cJSON_IsBool(show_d)) show_date_ = cJSON_IsTrue(show_d);
+        else if (cJSON_IsString(show_d)) {
+            std::string v = show_d->valuestring; for (auto &ch : v) ch = (char)tolower((unsigned char)ch);
+            show_date_ = (v == "yes" || v == "true" || v == "1");
+        } else if (cJSON_IsNumber(show_d)) {
+            show_date_ = (show_d->valueint != 0);
+        }
                 // positions
                 auto read_xy = [&](const char* key, std::array<int,2>& out) -> bool {
                     cJSON* a = cJSON_GetObjectItem(root, key);
@@ -420,7 +439,7 @@ private:
         cleanup();
         return true;
     }
-    // 本地主题枚举：优先 SD（兼容短名/缺 face.json），否则回退内置 assets 键名
+    // 本地主题枚举：优先 SD（兼容短名/缺 face.json）
     std::vector<std::string> ListClockFacesLocal() const {
         std::vector<std::string> faces;
         if (!IsSdMounted()) return faces;
@@ -430,12 +449,9 @@ private:
         struct dirent* ent;
         while ((ent = readdir(dir)) != nullptr) {
             const char* name = ent->d_name; if (!name || name[0]=='.') continue;
-            std::string theme_dir = base_dir + "/" + name;
-            DIR* sub = opendir(theme_dir.c_str());
-            if (!sub) continue;
-            closedir(sub);
-            std::string lower = name; for (auto &c : lower) c = (char)tolower((unsigned char)c);
-            faces.emplace_back(lower);
+            // 直接加入目录名，避免对中文/8.3 别名进行二次校验造成误过滤
+            // 保留原大小写，后续通过 ResolveSdThemeDir 做容错解析
+            faces.emplace_back(std::string(name));
         }
         closedir(dir);
         return faces;
@@ -445,25 +461,27 @@ private:
         if (!IsSdMounted()) return;
         std::string base_dir = ResolveSdClockFacesDir();
         std::string theme_dir = ResolveSdThemeDir(base_dir, active_face_name_);
-        std::string sd_path = theme_dir + "/face.json";
+        // 每次加载前重置，避免从上一个主题继承
+        show_date_ = false;
+        // 可选：同样重置文本时钟标志，保持按配置显式启用
+        use_text_time_ = false;
         void* buf = nullptr; size_t len = 0;
-        if (!ReadFileToPsram(sd_path.c_str(), &buf, &len)) {
-            // 尝试兼容查找（大小写与 8.3 短名）
-            std::string any = FindFaceJsonInDir(theme_dir);
-            if (!any.empty()) {
-                ESP_LOGI(TAG, "Try SD face(any): %s", any.c_str());
-                sd_path = any;
-                (void)ReadFileToPsram(sd_path.c_str(), &buf, &len);
+
+        // 只探测目录中实际存在的 face.json（支持大小写与 8.3 短名），避免先尝试固定名字导致无效报错
+        std::string sd_path = FindFaceJsonInDir(theme_dir);
+        if (!sd_path.empty()) {
+            ESP_LOGI(TAG, "Try SD face(any): %s", sd_path.c_str());
+            if (ReadFileToPsram(sd_path.c_str(), &buf, &len)) {
+                ESP_LOGI(TAG, "Loading face.json: %s", sd_path.c_str());
+                (void)ParseFaceJsonBuffer(static_cast<const char*>(buf), len);
+                heap_caps_free(buf);
+                return;
             }
         }
-        if (buf && len > 0) {
-            ESP_LOGI(TAG, "Loading face.json: %s", sd_path.c_str());
-            (void)ParseFaceJsonBuffer(static_cast<const char*>(buf), len);
-            heap_caps_free(buf);
-        } else {
-            ESP_LOGW(TAG, "face.json not found: %s", sd_path.c_str());
-            use_absolute_positions_ = false;
-        }
+
+        // 未找到任何可用的 face.json，降级为自动布局但不产生读取失败的错误日志
+        ESP_LOGW(TAG, "face.json not found in: %s", theme_dir.c_str());
+        use_absolute_positions_ = false;
     }
 
     // 不再支持自适应布局
@@ -808,36 +826,36 @@ private:
             if (time_text_) {
                 lv_obj_add_flag(time_text_, LV_OBJ_FLAG_HIDDEN);
             }
-            // flower 主题：显示日期（默认字体），位于时间数字下方（大小写不敏感）
-            {
-            std::string n = active_face_name_;
-            for (auto &c : n) c = (char)tolower((unsigned char)c);
-                if (n == "flower") UpdateAndShowDate(tm_info, /*is_digits_mode=*/true);
-                else { if (date_text_) lv_obj_add_flag(date_text_, LV_OBJ_FLAG_HIDDEN); if (date_line_) lv_obj_add_flag(date_line_, LV_OBJ_FLAG_HIDDEN); }
-                }
+            // 是否显示日期：由 face.json 的 show_date 控制
+            if (show_date_) {
+                UpdateAndShowDate(tm_info, /*is_digits_mode=*/true);
             } else {
-            // 降级到字体渲染，确保不空白
-            char buf[8];
-            snprintf(buf, sizeof(buf), "%02d:%02d", h, m);
-            // 文本渲染：使用可配置缩放与位置，并确保日期可见
-            if (!time_text_) {
-                time_text_ = lv_label_create(container_);
-                lv_obj_set_style_text_align(time_text_, LV_TEXT_ALIGN_CENTER, 0);
-                // 使用默认字体并放大
-                lv_obj_set_style_text_font(time_text_, LV_FONT_DEFAULT, 0);
-                lv_obj_set_style_transform_zoom(time_text_, time_zoom_, 0);
+                if (date_text_) lv_obj_add_flag(date_text_, LV_OBJ_FLAG_HIDDEN);
+                if (date_line_) lv_obj_add_flag(date_line_, LV_OBJ_FLAG_HIDDEN);
             }
-            // 每次更新时间时重新对齐，避免缩放后偏移
-            lv_obj_align(time_text_, LV_ALIGN_CENTER, 0, time_y_offset_);
-            lv_label_set_text(time_text_, buf);
-            lv_obj_clear_flag(time_text_, LV_OBJ_FLAG_HIDDEN);
-            // 日期标签：仅 flower 主题显示；位于时间下方（大小写不敏感）
-            {
-                std::string n = active_face_name_;
-                for (auto &c : n) c = (char)tolower((unsigned char)c);
-                if (n == "flower") UpdateAndShowDate(tm_info, /*is_digits_mode=*/false);
-            else { if (date_text_) lv_obj_add_flag(date_text_, LV_OBJ_FLAG_HIDDEN); if (date_line_) lv_obj_add_flag(date_line_, LV_OBJ_FLAG_HIDDEN); }
-        }
+            } else {
+            // 降级到文本渲染，但避免在主题切换或数字图片预加载阶段造成瞬时闪烁
+            if (switch_mode_ || digits_preloading_) {
+                if (time_text_) lv_obj_add_flag(time_text_, LV_OBJ_FLAG_HIDDEN);
+                // 仅按需显示日期
+                if (show_date_) UpdateAndShowDate(tm_info, /*is_digits_mode=*/false);
+                else { if (date_text_) lv_obj_add_flag(date_text_, LV_OBJ_FLAG_HIDDEN); if (date_line_) lv_obj_add_flag(date_line_, LV_OBJ_FLAG_HIDDEN); }
+            } else {
+                char buf[8];
+                snprintf(buf, sizeof(buf), "%02d:%02d", h, m);
+                if (!time_text_) {
+                    time_text_ = lv_label_create(container_);
+                    lv_obj_set_style_text_align(time_text_, LV_TEXT_ALIGN_CENTER, 0);
+                    lv_obj_set_style_text_font(time_text_, LV_FONT_DEFAULT, 0);
+                    lv_obj_set_style_transform_zoom(time_text_, time_zoom_, 0);
+                }
+                lv_obj_align(time_text_, LV_ALIGN_CENTER, 0, time_y_offset_);
+                lv_label_set_text(time_text_, buf);
+                lv_obj_clear_flag(time_text_, LV_OBJ_FLAG_HIDDEN);
+                // 日期标签：由 show_date_ 控制；位于时间下方
+                if (show_date_) UpdateAndShowDate(tm_info, /*is_digits_mode=*/false);
+                else { if (date_text_) lv_obj_add_flag(date_text_, LV_OBJ_FLAG_HIDDEN); if (date_line_) lv_obj_add_flag(date_line_, LV_OBJ_FLAG_HIDDEN); }
+            }
             // 隐藏图片层以避免覆盖
             for (int i = 0; i < 5; ++i) {
                 if (digit_img_[i]) lv_obj_add_flag(digit_img_[i], LV_OBJ_FLAG_HIDDEN);
@@ -866,20 +884,12 @@ private:
             lv_obj_set_style_radius(date_line_, 0, 0);
             lv_obj_set_height(date_line_, 1);
         }
-        if (is_digits_mode) {
-            if (use_absolute_positions_) {
-                int bottom_y = pos_[0][1];
-                for (int i = 1; i < 4; ++i) bottom_y = bottom_y > pos_[i][1] ? bottom_y : pos_[i][1];
-                lv_obj_align(date_text_, LV_ALIGN_CENTER, 0, bottom_y + date_gap_ + 42);
-            } else if (time_container_) {
-                lv_obj_align_to(date_text_, time_container_, LV_ALIGN_OUT_BOTTOM_MID, 0, date_gap_ + 42);
-            } else {
-                lv_obj_align(date_text_, LV_ALIGN_CENTER, 0, date_gap_ + 42);
-            }
+        // 固定日期位置：不依赖时间/数字，始终相对屏幕中心偏移
+        // 若 face.json 提供 pos_date/date 则优先使用；否则使用固定偏移（0, 80）
+        if (has_date_pos_) {
+            lv_obj_align(date_text_, LV_ALIGN_CENTER, date_pos_[0], date_pos_[1]);
         } else {
-            // 文本时间：跟随 time_text_
-            if (time_text_) lv_obj_align_to(date_text_, time_text_, LV_ALIGN_OUT_BOTTOM_MID, 0, date_gap_ + 42);
-            else lv_obj_align(date_text_, LV_ALIGN_CENTER, 0, date_gap_ + 42);
+            lv_obj_align(date_text_, LV_ALIGN_CENTER, 0, 20);
         }
         // 在读取宽度之前强制布局，确保首次显示获得正确宽度
         lv_obj_update_layout(date_text_);
@@ -975,6 +985,7 @@ private:
     // 切换模式状态
     bool switch_mode_ = false;
     std::vector<std::string> faces_;
+    std::vector<std::string> face_labels_; // 与 faces_ 对应的显示名称（可中文）
     int current_face_index_ = -1;     // 正在使用
     int preview_face_index_ = -1;     // 预览中的
     bool touch_active_ = false;       // 切换界面内是否有手指按住/滑动
@@ -991,8 +1002,6 @@ private:
         if (switch_mode_) return;
         switch_mode_ = true;
         ESP_LOGI(TAG, "EnterSwitchMode: open theme roller");
-        // 不再缩放容器，保持原尺寸
-        // 去除阴影框，避免出现“两个框”的观感
         lv_obj_set_style_shadow_width(container_, 0, 0);
         // 进入主题切换模式：背景改为黑色，字体改为白色（在滚轮样式中设置）
         lv_obj_set_style_bg_color(container_, lv_color_hex(0x000000), 0);
@@ -1006,7 +1015,6 @@ private:
         if (time_text_) lv_obj_add_flag(time_text_, LV_OBJ_FLAG_HIDDEN);
         if (date_text_) lv_obj_add_flag(date_text_, LV_OBJ_FLAG_HIDDEN);
         if (date_line_) lv_obj_add_flag(date_line_, LV_OBJ_FLAG_HIDDEN);
-        // 枚举主题（尽量不改动 assets：在此本地完成 SD 与内置枚举）
         faces_ = ListClockFacesLocal();
         // 记录可用主题，便于诊断资源是否打包完整
         {
@@ -1032,35 +1040,83 @@ private:
         roller_ = lv_roller_create(container_);
         // 拼接选项
         {
+            // 构建中文显示列表（优先 face.json 的 display_name/name/title/zh_name）
+            face_labels_.clear(); face_labels_.reserve(faces_.size());
+            auto make_label = [&](const std::string& key)->std::string{
+                std::string base_dir = ResolveSdClockFacesDir();
+                std::string theme_dir = ResolveSdThemeDir(base_dir, key);
+                std::string json_path = FindFaceJsonInDir(theme_dir);
+                if (!json_path.empty()) {
+                    void* buf = nullptr; size_t len = 0;
+                    if (ReadFileToPsram(json_path.c_str(), &buf, &len)) {
+                        std::string label;
+                        cJSON* root = cJSON_ParseWithLength(static_cast<const char*>(buf), len);
+                        if (root) {
+                            const char* keys[] = {"display_name", "name", "title", "zh_name"};
+                            for (auto k : keys) {
+                                cJSON* v = cJSON_GetObjectItem(root, k);
+                                if (cJSON_IsString(v) && v->valuestring && strlen(v->valuestring) > 0) { label = v->valuestring; break; }
+                            }
+                            cJSON_Delete(root);
+                        }
+                        heap_caps_free(buf);
+                        if (!label.empty()) return label;
+                    }
+                }
+                return key;
+            };
+            for (auto &k : faces_) face_labels_.push_back(make_label(k));
+
             std::string opts;
             for (size_t i = 0; i < faces_.size(); ++i) {
                 if (i) opts += '\n';
-                opts += faces_[i];
+                const std::string& label = (i < face_labels_.size()) ? face_labels_[i] : faces_[i];
+                opts += label;
             }
             lv_roller_set_options(roller_, opts.c_str(), LV_ROLLER_MODE_INFINITE);
         }
         lv_obj_set_width(roller_, width_); // 选中条与屏幕同宽
-        lv_roller_set_visible_row_count(roller_, 5);
+        // 让滚轮占满整个屏幕（宽高100%），并移除自身内边距
+        lv_obj_set_size(roller_, LV_PCT(100), LV_PCT(100));
+        lv_obj_set_style_pad_all(roller_, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(roller_, 0, LV_PART_SELECTED);
+        // 固定行距：让每行更高（无需动态计算）
+        // 固定较小行距，允许显示更多行（例如 4 行）
+        lv_obj_set_style_text_line_space(roller_, 4, LV_PART_MAIN);
+        lv_obj_set_style_text_line_space(roller_, 4, LV_PART_SELECTED);
+        // 可见行数为奇数，若有4个主题则显示5行以铺满，并居中
+        int vr = (int)faces_.size();
+        if ((vr % 2) == 0) vr += 1;   // 奇数行居中
+        if (vr < 7) vr = 7;           // 更大的可见行数（行数加大）
+        lv_roller_set_visible_row_count(roller_, vr);
         lv_obj_align(roller_, LV_ALIGN_CENTER, 0, 0);
         lv_obj_move_foreground(roller_);
         // 样式：主区透明（容器背景已是黑色），文本白色；选中行为半透明黑条并高亮文字
+        // 滚轮主区：透明，由选中条高亮
         lv_obj_set_style_bg_opa(roller_, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(roller_, 0, LV_PART_MAIN);
         lv_obj_set_style_outline_width(roller_, 0, LV_PART_MAIN);
         lv_obj_set_style_radius(roller_, 0, LV_PART_MAIN);
         lv_obj_set_style_text_color(roller_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
         lv_obj_set_style_text_opa(roller_, LV_OPA_COVER, LV_PART_MAIN);
-        // 选中行：半透明黑底+纯白字，确保对比度
-        lv_obj_set_style_bg_color(roller_, lv_color_hex(0xB0B0B0), LV_PART_SELECTED); // 浅灰
-        lv_obj_set_style_bg_opa(roller_, LV_OPA_60, LV_PART_SELECTED); // 半透明
+        // 选中行：半透明黑底+纯白字，确保对比度，并增加上下内边距扩大选中条厚度
+        // 选中行：半透明灰+白字
+        lv_obj_set_style_bg_color(roller_, lv_color_hex(0x606060), LV_PART_SELECTED);
+        lv_obj_set_style_bg_opa(roller_, LV_OPA_70, LV_PART_SELECTED);
         lv_obj_set_style_border_width(roller_, 0, LV_PART_SELECTED);
         lv_obj_set_style_outline_width(roller_, 0, LV_PART_SELECTED);
         lv_obj_set_style_radius(roller_, 0, LV_PART_SELECTED);
         lv_obj_set_style_text_color(roller_, lv_color_hex(0xFFFFFF), LV_PART_SELECTED);
         lv_obj_set_style_text_opa(roller_, LV_OPA_COVER, LV_PART_SELECTED);
-        // 文本排版：避免因字距/行距导致的观感模糊
+        lv_obj_set_style_pad_top(roller_, 20, LV_PART_SELECTED);    // 行高：增大选中条上下内边距
+        lv_obj_set_style_pad_bottom(roller_, 20, LV_PART_SELECTED);
+        // 文本排版：略增上下内边距与行距，让每行更"厚实"
         lv_obj_set_style_text_letter_space(roller_, 0, LV_PART_MAIN);
         lv_obj_set_style_text_letter_space(roller_, 0, LV_PART_SELECTED);
+        lv_obj_set_style_pad_top(roller_, 12, LV_PART_MAIN);        // 行高：增大普通行上下内边距
+        lv_obj_set_style_pad_bottom(roller_, 12, LV_PART_MAIN);
+        lv_obj_set_style_text_line_space(roller_, 14, LV_PART_MAIN);      // 行距加大
+        lv_obj_set_style_text_line_space(roller_, 14, LV_PART_SELECTED);
         lv_roller_set_selected(roller_, preview_face_index_, LV_ANIM_OFF);
         lv_obj_update_layout(container_);
         // 事件：滚动时更新索引并重置自动确认计时
@@ -1212,6 +1268,9 @@ private:
     int date_zoom_ = 256;      // 固定 1.0x
     int time_y_offset_ = 0;    // 垂直偏移
     int date_gap_ = 6;         // 时间与日期的间距
+    bool show_date_ = false;   // 是否显示日期（由 face.json 控制）
+    bool has_date_pos_ = false;             // 是否有日期绝对坐标
+    std::array<int,2> date_pos_{0, 0};     // 日期绝对坐标（以屏幕中心为原点）
 
     // 背景多图轮换（SD）
     std::vector<std::string> bg_files_;

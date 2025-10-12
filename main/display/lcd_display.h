@@ -16,21 +16,6 @@
 #define PREVIEW_IMAGE_DURATION_MS 5000
 
 
-#ifdef __cplusplus
-// C++: 使用强类型枚举
-enum class UIMode : uint8_t {
-    Clock,
-    Music,
-    Chat
-};
-#else
-// C: 提供等价占位，避免被 C 文件包含时报错
-typedef uint8_t UIMode;
-#define UIMode_Clock 0
-#define UIMode_Music 1
-#define UIMode_Chat  2
-#endif
-
 class LcdDisplay : public LvglDisplay {
 public:
 protected:
@@ -61,7 +46,6 @@ protected:
     void* pixel_thinking_clock_ = nullptr;
     bool clock_visible_ = false;
     void EnsureClockFaceInitialized();
-    void ShowClockFace();
     void HideClockFace();
 
 
@@ -72,10 +56,6 @@ protected:
     
     // 检查是否选择了音乐播放器界面风格
     bool IsMusicPlayerStyleEnabled() const;
-    
-    // 传统方式显示音乐信息的辅助方法
-    void SetMusicInfoTraditional(const char* text, const char* mode_name);
-    void SetMusicDetailsTraditional(const char* title, const char* artist, bool is_playing, const char* mode_name);
 
 protected:
     // 添加protected构造函数
@@ -89,10 +69,11 @@ public:
     virtual void SetPreviewImage(std::unique_ptr<LvglImage> image) override;
     virtual void UpdateStatusBar(bool update_all = false) override;
 
-    // 公开一个状态协调点
-    void OnStateMaybeChanged();
-    void ApplyUIMode(UIMode mode);
-
+    // 显式界面切换函数
+    void ShowChatInterface();
+    bool CanShowClockFace() const;
+    void ShowClockFace();
+    
     // 统一管理表情显隐
     void ApplyEmojiVisibility();
     bool ShouldShowEmojis() const;
@@ -101,8 +82,8 @@ public:
     // Add theme switching function
     virtual void SetTheme(Theme* theme) override;
 
-    // Add set music info function
-    virtual void SetMusicInfo(const char* song_name) override;
+    // 统一的音乐播放器接口
+    virtual void UpdateMusicState(const char* title, const char* artist, bool is_playing) override;
     virtual void SetMusicDetails(const char* song_title, const char* artist, bool is_playing) override;
     
     // 音乐播放器功能
@@ -111,17 +92,6 @@ public:
     void UpdateMusicProgress(float progress);
     void UpdateMusicLyrics(const char* lyrics);
     void UpdateMusicTime(const char* current_time, const char* duration);
-    void SetMusicPlayState(bool is_playing);
-    
-    // 音乐控制回调设置
-    void SetMusicControlCallbacks(
-        void (*play_pause_cb)(void*),
-        void (*previous_cb)(void*),
-        void (*next_cb)(void*),
-        void (*progress_cb)(float, void*),
-        void (*volume_cb)(int, void*),
-        void* user_data
-    );
     
     // 音量控制
     void SetVolume(int volume);  // 0-100
@@ -134,10 +104,6 @@ public:
     // 音乐进度更新
     void StartMusicProgressUpdate();
     void StopMusicProgressUpdate();
-    
-    // 音乐播放器状态检查
-    bool IsMusicPlayerVisible() const;
-    void SetMusicPlayerPlayState(MusicPlayerUI::PlayState state);
 };
 
 // SPI LCD显示器

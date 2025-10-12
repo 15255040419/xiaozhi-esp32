@@ -30,6 +30,7 @@ public:
     Display();
     virtual ~Display();
 
+    // 基本界面操作
     virtual void SetStatus(const char* status);
     virtual void ShowNotification(const char* notification, int duration_ms = 3000);
     virtual void ShowNotification(const std::string &notification, int duration_ms = 3000);
@@ -38,12 +39,19 @@ public:
     virtual void SetTheme(Theme* theme);
     virtual Theme* GetTheme() { return current_theme_; }
     virtual void UpdateStatusBar(bool update_all = false);
+    
+    // 音乐播放器接口
+    virtual void UpdateMusicState(const char* title, const char* artist, bool is_playing) {}
     virtual void SetMusicInfo(const char* song_name);
     virtual void SetMusicDetails(const char* song_title, const char* artist, bool is_playing);
+    
+    // 电源管理
     virtual void SetPowerSaveMode(bool on);
+    
+    // FFT显示（默认空实现）
     virtual void start() {}
-    virtual void clearScreen() {}  // 清除FFT显示，默认为空实现
-    virtual void stopFft() {}      // 停止FFT显示，默认为空实现
+    virtual void clearScreen() {}
+    virtual void stopFft() {}
 
     inline int width() const { return width_; }
     inline int height() const { return height_; }

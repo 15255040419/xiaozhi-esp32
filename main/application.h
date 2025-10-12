@@ -50,6 +50,11 @@ public:
     void SetDeviceState(DeviceState state);
     void Alert(const char* status, const char* message, const char* emotion = "", const std::string_view& sound = "");
     void DismissAlert();
+    
+    // UI Mode management
+    void ShowChatInterface();
+    void ShowClockInterface();
+    void ShowMusicInterface();
     void AbortSpeaking(AbortReason reason);
     void ToggleChatState();
     void StartListening();
