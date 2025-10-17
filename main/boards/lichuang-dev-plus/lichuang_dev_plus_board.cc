@@ -9,7 +9,6 @@
 #include "power_save_timer.h"
 #include "sdcard.h"
 #include "esp32_camera.h"
-// #include "lichuang_camera.h" // no longer needed when using default Esp32Camera
 
 #include <esp_log.h>
 #include <esp_lcd_panel_vendor.h>
@@ -26,9 +25,6 @@ extern "C" bool clock_face_is_active();
 
 #define TAG "LichuangDevPlusBoard"
 
-LV_FONT_DECLARE(font_puhui_basic_20_4);
-LV_FONT_DECLARE(font_awesome_20_4);
-
 class Pmic : public Axp2101 {
 public:
     Pmic(i2c_master_bus_handle_t i2c_bus, uint8_t addr) : Axp2101(i2c_bus, addr) {
@@ -39,9 +35,11 @@ public:
 
         WriteReg(0x92, 0x1C); // 配置 aldo1 输出为 3.3V
         WriteReg(0x93, 0x17); // 配置 aldo2 输出为 2.8V
+        WriteReg(0x94, 0x17); // 新增: 配置 aldo3 输出为 2.8V
+        WriteReg(0x95, 0x0D); // 新增: 配置 aldo4 输出为 1.8V
     
         uint8_t value = ReadReg(0x90); // XPOWERS_AXP2101_LDO_ONOFF_CTRL0
-        value = value | 0x02; // set bit 1 (ALDO2)
+        value = value | 0x0E; // 修改: 同时使能 ALDO2, ALDO3, ALDO4 (bit 1, 2, 3)
         WriteReg(0x90, value);  // and power channels now enabled
     
         WriteReg(0x64, 0x03); // CV charger voltage setting to 4.2V

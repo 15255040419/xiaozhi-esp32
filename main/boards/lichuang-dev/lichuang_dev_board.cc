@@ -6,6 +6,7 @@
 #include "config.h"
 #include "i2c_device.h"
 #include "esp32_camera.h"
+#include "sdcard.h"
 
 #include <esp_log.h>
 #include <esp_lcd_panel_vendor.h>
@@ -71,6 +72,7 @@ private:
     LcdDisplay* display_;
     Pca9557* pca9557_;
     Esp32Camera* camera_;
+    SdCard sdcard_;
 
     void InitializeI2c() {
         // Initialize I2C peripheral
@@ -191,6 +193,16 @@ private:
         lvgl_port_add_touch(&touch_cfg);
     }
 
+    void InitializeSdCard() {
+        // 1-bit SDMMC: CLK/CMD/D0 引脚见 config.h
+        esp_err_t err = sdcard_.Mount1Bit(SDMMC_CLK_GPIO, SDMMC_CMD_GPIO, SDMMC_D0_GPIO, "/sdcard");
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "SD card ready at %s", sdcard_.mount_point().c_str());
+        } else {
+            ESP_LOGW(TAG, "SD card not mounted: %s", esp_err_to_name(err));
+        }
+    }
+
     void InitializeCamera() {
         // Open camera power
         pca9557_->SetOutputState(2, 0);
@@ -234,6 +246,7 @@ public:
         InitializeTouch();
         InitializeButtons();
         InitializeCamera();
+        InitializeSdCard();
 
         GetBacklight()->RestoreBrightness();
     }
