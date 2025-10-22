@@ -481,13 +481,25 @@ private:
             ESP_LOGE(TAG, "Camera initialization failed!"); 
             return;
         }
-        // Enable vertical flip after camera init
+        
+        // 根据摄像头型号配置
         sensor_t* s = esp_camera_sensor_get();
         if (s) {
-            s->set_vflip(s, 1);
-            ESP_LOGI(TAG, "Vertical flip enabled for camera sensor");
+            // GC2145_PID = 0x2145, GC0308_PID = 0x9b
+            if (s->id.PID == 0x2145) {
+                // GC2145: 不需要翻转
+                ESP_LOGI(TAG, "Detected GC2145 camera - no flip needed");
+            } else if (s->id.PID == 0x9b) {
+                // GC0308: 默认配置，需要垂直翻转
+                s->set_vflip(s, 1);
+                ESP_LOGI(TAG, "Detected GC0308 camera - vertical flip enabled");
+            } else {
+                // 其他摄像头: 使用GC0308的默认配置（翻转）
+                s->set_vflip(s, 1);
+                ESP_LOGI(TAG, "Unknown camera PID: 0x%04X - using default config with vflip", s->id.PID);
+            }
         } else {
-            ESP_LOGW(TAG, "Failed to get camera sensor for vflip");
+            ESP_LOGW(TAG, "Failed to get camera sensor");
         }
     }
     

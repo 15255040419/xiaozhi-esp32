@@ -49,7 +49,7 @@ std::string SystemInfo::GetChipModelName() {
 
 std::string SystemInfo::GetUserAgent() {
     auto app_desc = esp_app_get_description();
-    auto user_agent = std::string(BOARD_NAME "/") + app_desc->version + "\nFang bian mian";
+    auto user_agent = std::string(BOARD_NAME "/") + app_desc->version + "\nFBM";
     return user_agent;
 }
 
