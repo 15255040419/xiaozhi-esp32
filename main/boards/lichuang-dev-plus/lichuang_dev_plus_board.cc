@@ -513,7 +513,7 @@ public:
         InitializeSpi();
         InitializeSt7789Display();
         InitializeButtons();
-        InitializeTouch();
+        //InitializeTouch();
         InitializeCamera();
         InitializeSdCard();
     }
