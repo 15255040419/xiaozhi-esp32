@@ -1,6 +1,7 @@
 #include "dual_network_board.h" 
 #include "codecs/box_audio_codec.h"
 #include "display/lcd_display.h"
+#include "display/emote_display.h"
 #include "application.h"
 #include "button.h"
 #include "config.h"
@@ -164,11 +165,8 @@ private:
     i2c_master_bus_handle_t i2c_bus_;
     Pmic* pmic_;
     Button boot_button_;
-    LcdDisplay* display_;
+    Display* display_;
     Aw9523b* aw9523b_;
-    // 音量手势控制
-    lv_obj_t* volume_gesture_obj_ = nullptr;
-    lv_obj_t* volume_bar_obj_ = nullptr;
     Esp32Camera* camera_;
     PowerSaveTimer* power_save_timer_;
     SdCard sdcard_;
@@ -198,7 +196,11 @@ private:
             .scl_io_num = AUDIO_CODEC_I2C_SCL_PIN,
             .clk_source = I2C_CLK_SRC_DEFAULT,
             .glitch_ignore_cnt = 7,
-            .flags = { .enable_internal_pullup = true },
+            .intr_priority = 0,
+            .trans_queue_depth = 0,
+            .flags = {
+                .enable_internal_pullup = 1,
+            },
         };
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &i2c_bus_));
 
@@ -209,7 +211,6 @@ private:
     void InitializePmic() { 
         pmic_ = new Pmic(i2c_bus_, 0x34); 
     }
-
 
     void InitializeSpi() {
         spi_bus_config_t buscfg = {};
@@ -252,8 +253,14 @@ private:
         esp_lcd_panel_invert_color(panel, true);
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
+        esp_lcd_panel_disp_on_off(panel, true);
+
+#if CONFIG_USE_EMOTE_MESSAGE_STYLE
+        display_ = new emote::EmoteDisplay(panel, panel_io, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+#else
         display_ = new SpiLcdDisplay(panel_io, panel,
-                                    DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+            DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+#endif
     }
 
     void InitializeTouch()
@@ -288,123 +295,10 @@ private:
             .handle = tp,
         };
 
-        lvgl_port_add_touch(&touch_cfg);
-        
-        // Setup volume control gesture
-        SetupVolumeGesture();
-    }
-    
-    void SetupVolumeGesture() {
-        // 创建一个透明的对象来捕获触摸事件
-        volume_gesture_obj_ = lv_obj_create(lv_screen_active());
-        lv_obj_set_size(volume_gesture_obj_, 60, DISPLAY_HEIGHT); // 右侧60像素宽度
-        lv_obj_set_pos(volume_gesture_obj_, DISPLAY_WIDTH - 60, 0); // 位置在右侧
-        lv_obj_set_style_bg_opa(volume_gesture_obj_, LV_OPA_TRANSP, 0); // 透明背景
-        lv_obj_set_style_border_opa(volume_gesture_obj_, LV_OPA_TRANSP, 0); // 透明边框
-        lv_obj_set_style_outline_opa(volume_gesture_obj_, LV_OPA_TRANSP, 0); // 透明轮廓
-        lv_obj_add_flag(volume_gesture_obj_, LV_OBJ_FLAG_CLICKABLE); // 可点击
-        
-        // 添加触摸事件处理
-        lv_obj_add_event_cb(volume_gesture_obj_, VolumeGestureEventCb, LV_EVENT_ALL, this);
-        
-        // 创建音量指示条（初始隐藏）
-        volume_bar_obj_ = lv_bar_create(lv_screen_active());
-        lv_obj_set_size(volume_bar_obj_, 20, 200);
-        lv_obj_set_pos(volume_bar_obj_, DISPLAY_WIDTH - 40, (DISPLAY_HEIGHT - 200) / 2);
-        lv_bar_set_range(volume_bar_obj_, 0, 100);
-        lv_obj_add_flag(volume_bar_obj_, LV_OBJ_FLAG_HIDDEN); // 初始隐藏
-        
-        // 设置进度条样式
-        lv_obj_set_style_bg_color(volume_bar_obj_, lv_color_hex(0x404040), LV_PART_MAIN);
-        lv_obj_set_style_bg_color(volume_bar_obj_, lv_color_hex(0x00FF00), LV_PART_INDICATOR);
-        lv_obj_set_style_radius(volume_bar_obj_, 10, LV_PART_MAIN);
-        lv_obj_set_style_radius(volume_bar_obj_, 10, LV_PART_INDICATOR);
-    }
-    
-    static void VolumeGestureEventCb(lv_event_t* e) {
-        LichuangDevPlusBoard* board = (LichuangDevPlusBoard*)lv_event_get_user_data(e);
-        board->HandleVolumeGesture(e);
-    }
-    
-    
-    void HandleVolumeGesture(lv_event_t* e) {
-        lv_event_code_t code = lv_event_get_code(e);
-        static int16_t start_y = 0;
-        static int start_volume = 0;
-        static bool gesture_active = false;
-
-        // 在时钟界面（含切换模式）激活时，彻底忽略音量手势
-        if (clock_face_is_active()) {
-            return;
-        }
-        
-        if (code == LV_EVENT_PRESSED) {
-            lv_indev_t* indev = lv_indev_get_act();
-            lv_point_t point;
-            lv_indev_get_point(indev, &point);
-            start_y = point.y;
-            start_volume = GetAudioCodec()->output_volume();
-            gesture_active = true;
-            
-            // 显示音量条
-            lv_obj_clear_flag(volume_bar_obj_, LV_OBJ_FLAG_HIDDEN);
-            lv_bar_set_value(volume_bar_obj_, start_volume, LV_ANIM_OFF);
-            
-            // 唤醒省电定时器
-            power_save_timer_->WakeUp();
-            
-        } else if (code == LV_EVENT_PRESSING && gesture_active) {
-            lv_indev_t* indev = lv_indev_get_act();
-            lv_point_t point;
-            lv_indev_get_point(indev, &point);
-            
-            // 计算音量变化（向上滑动增加音量，向下滑动减少音量）
-            int16_t delta_y = start_y - point.y; // 注意方向：向上为正
-            int volume_change = delta_y / 3; // 每3像素改变1%音量
-            int new_volume = start_volume + volume_change;
-            
-            // 限制音量范围
-            if (new_volume < 0) new_volume = 0;
-            if (new_volume > 100) new_volume = 100;
-            
-            // 只有音量真的变化了才更新（避免过于频繁的调用）
-            static int last_volume = -1;
-            if (new_volume != last_volume) {
-                last_volume = new_volume;
-                
-                // 更新音量
-                GetAudioCodec()->SetOutputVolume(new_volume);
-                lv_bar_set_value(volume_bar_obj_, new_volume, LV_ANIM_OFF);
-                
-                // 实时显示音量通知（每隔5%才显示，减少频繁更新）
-                if (new_volume % 5 == 0 || new_volume == 0 || new_volume == 100) {
-                    GetDisplay()->ShowNotification(("音量: " + std::to_string(new_volume) + "%").c_str());
-                }
-            }
-            
-        } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
-            if (gesture_active) {
-                gesture_active = false;
-                
-                // 显示最终音量通知
-                int current_volume = GetAudioCodec()->output_volume();
-                GetDisplay()->ShowNotification(("音量设置: " + std::to_string(current_volume) + "%").c_str());
-                
-                // 立即隐藏音量条（不使用定时器，避免死锁）
-                lv_obj_add_flag(volume_bar_obj_, LV_OBJ_FLAG_HIDDEN);
-            }
-        }
-    }
-
-    // 启用/禁用触摸音量手势
-    void SetVolumeGestureEnabled(bool enabled) {
-        if (!volume_gesture_obj_) return;
-        if (enabled) {
-            lv_obj_clear_flag(volume_gesture_obj_, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(volume_gesture_obj_, LV_OBJ_FLAG_CLICKABLE);
+        if(touch_cfg.disp) {
+            lvgl_port_add_touch(&touch_cfg);
         } else {
-            lv_obj_add_flag(volume_gesture_obj_, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(volume_gesture_obj_, LV_OBJ_FLAG_CLICKABLE);
+            ESP_LOGE(TAG, "Touch display is not initialized");
         }
     }
     
@@ -448,61 +342,46 @@ private:
     void InitializeCamera() {
         // Open camera power
         aw9523b_->SetOutputState(2, 0);
-        camera_config_t config = {};
-        config.ledc_channel = LEDC_CHANNEL_2;
-        config.ledc_timer = LEDC_TIMER_2;
-        config.pin_d0 = CAMERA_PIN_D0;
-        config.pin_d1 = CAMERA_PIN_D1;
-        config.pin_d2 = CAMERA_PIN_D2;
-        config.pin_d3 = CAMERA_PIN_D3;
-        config.pin_d4 = CAMERA_PIN_D4;
-        config.pin_d5 = CAMERA_PIN_D5;
-        config.pin_d6 = CAMERA_PIN_D6;
-        config.pin_d7 = CAMERA_PIN_D7;
-        config.pin_xclk = CAMERA_PIN_XCLK;
-        config.pin_pclk = CAMERA_PIN_PCLK;
-        config.pin_vsync = CAMERA_PIN_VSYNC;
-        config.pin_href = CAMERA_PIN_HREF;
-        config.pin_sccb_sda = -1;
-        config.pin_sccb_scl = CAMERA_PIN_SIOC;
-        config.sccb_i2c_port = 1;
-        config.pin_pwdn = CAMERA_PIN_PWDN;
-        config.pin_reset = CAMERA_PIN_RESET;
-        config.xclk_freq_hz = XCLK_FREQ_HZ;
-        config.pixel_format = PIXFORMAT_RGB565;
-        config.frame_size = FRAMESIZE_VGA;
-        config.jpeg_quality = 12;
-        config.fb_count = 1;
-        config.fb_location = CAMERA_FB_IN_PSRAM;
-        config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
 
-        camera_ = new Esp32Camera(config);
-        if (!camera_) { 
-            ESP_LOGE(TAG, "Camera initialization failed!"); 
-            return;
-        }
-        
-        // 根据摄像头型号配置
-        sensor_t* s = esp_camera_sensor_get();
-        if (s) {
-            // GC2145_PID = 0x2145, GC0308_PID = 0x9b
-            if (s->id.PID == 0x2145) {
-                // GC2145: 不需要翻转
-                ESP_LOGI(TAG, "Detected GC2145 camera - no flip needed");
-            } else if (s->id.PID == 0x9b) {
-                // GC0308: 默认配置，需要垂直翻转
-                s->set_vflip(s, 1);
-                ESP_LOGI(TAG, "Detected GC0308 camera - vertical flip enabled");
-            } else {
-                // 其他摄像头: 使用GC0308的默认配置（翻转）
-                s->set_vflip(s, 1);
-                ESP_LOGI(TAG, "Unknown camera PID: 0x%04X - using default config with vflip", s->id.PID);
-            }
-        } else {
-            ESP_LOGW(TAG, "Failed to get camera sensor");
-        }
+        static esp_cam_ctlr_dvp_pin_config_t dvp_pin_config = {
+            .data_width = CAM_CTLR_DATA_WIDTH_8,
+            .data_io = {
+                [0] = CAMERA_PIN_D0,
+                [1] = CAMERA_PIN_D1,
+                [2] = CAMERA_PIN_D2,
+                [3] = CAMERA_PIN_D3,
+                [4] = CAMERA_PIN_D4,
+                [5] = CAMERA_PIN_D5,
+                [6] = CAMERA_PIN_D6,
+                [7] = CAMERA_PIN_D7,
+            },
+            .vsync_io = CAMERA_PIN_VSYNC,
+            .de_io = CAMERA_PIN_HREF,
+            .pclk_io = CAMERA_PIN_PCLK,
+            .xclk_io = CAMERA_PIN_XCLK,
+        };
+
+        esp_video_init_sccb_config_t sccb_config = {
+            .init_sccb = false,
+            .i2c_handle = i2c_bus_,
+            .freq = 100000,
+        };
+
+        esp_video_init_dvp_config_t dvp_config = {
+            .sccb_config = sccb_config,
+            .reset_pin = CAMERA_PIN_RESET,
+            .pwdn_pin = CAMERA_PIN_PWDN,
+            .dvp_pin = dvp_pin_config,
+            .xclk_freq = XCLK_FREQ_HZ,
+        };
+
+        esp_video_init_config_t video_config = {
+            .dvp = &dvp_config,
+        };
+
+        camera_ = new Esp32Camera(video_config);
     }
-    
+
 public:
     LichuangDevPlusBoard() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN), boot_button_(BOOT_BUTTON_GPIO) {
         InitializePowerSaveTimer();
@@ -513,7 +392,7 @@ public:
         InitializeSpi();
         InitializeSt7789Display();
         InitializeButtons();
-        //InitializeTouch();
+        InitializeTouch();
         InitializeCamera();
         InitializeSdCard();
     }
