@@ -13,12 +13,15 @@
 #include <esp_lcd_panel_vendor.h>
 #include <driver/i2c_master.h>
 #include <driver/spi_common.h>
-#include <wifi_station.h>
+#include <esp_timer.h>
+#include <wifi_station.h> 
 #include <esp_lcd_touch_ft5x06.h>
 #include <esp_lvgl_port.h>
 #include <lvgl.h>
 
 #define TAG "LichuangDevBoard"
+
+extern "C" bool clock_face_is_active();
 
 class Pca9557 : public I2cDevice {
 public:
@@ -72,6 +75,9 @@ private:
     Button boot_button_;
     Display* display_;
     Pca9557* pca9557_;
+    // 音量手势控制
+    lv_obj_t* volume_gesture_obj_ = nullptr;
+    lv_obj_t* volume_bar_obj_ = nullptr;
     Esp32Camera* camera_;
     SdCard sdcard_;
 
@@ -201,6 +207,121 @@ private:
             lvgl_port_add_touch(&touch_cfg);
         } else {
             ESP_LOGE(TAG, "Touch display is not initialized");
+        }
+          // Setup volume control gesture
+        SetupVolumeGesture();
+    }
+    
+    void SetupVolumeGesture() {
+        // 创建一个透明的对象来捕获触摸事件
+        volume_gesture_obj_ = lv_obj_create(lv_screen_active());
+        lv_obj_set_size(volume_gesture_obj_, 60, DISPLAY_HEIGHT); // 右侧60像素宽度
+        lv_obj_set_pos(volume_gesture_obj_, DISPLAY_WIDTH - 60, 0); // 位置在右侧
+        lv_obj_set_style_bg_opa(volume_gesture_obj_, LV_OPA_TRANSP, 0); // 透明背景
+        lv_obj_set_style_border_opa(volume_gesture_obj_, LV_OPA_TRANSP, 0); // 透明边框
+        lv_obj_set_style_outline_opa(volume_gesture_obj_, LV_OPA_TRANSP, 0); // 透明轮廓
+        lv_obj_add_flag(volume_gesture_obj_, LV_OBJ_FLAG_CLICKABLE); // 可点击
+        
+        // 添加触摸事件处理
+        lv_obj_add_event_cb(volume_gesture_obj_, VolumeGestureEventCb, LV_EVENT_ALL, this);
+        
+        // 创建音量指示条（初始隐藏）
+        volume_bar_obj_ = lv_bar_create(lv_screen_active());
+        lv_obj_set_size(volume_bar_obj_, 20, 200);
+        lv_obj_set_pos(volume_bar_obj_, DISPLAY_WIDTH - 40, (DISPLAY_HEIGHT - 200) / 2);
+        lv_bar_set_range(volume_bar_obj_, 0, 100);
+        lv_obj_add_flag(volume_bar_obj_, LV_OBJ_FLAG_HIDDEN); // 初始隐藏
+        
+        // 设置进度条样式
+        lv_obj_set_style_bg_color(volume_bar_obj_, lv_color_hex(0x404040), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(volume_bar_obj_, lv_color_hex(0x00FF00), LV_PART_INDICATOR);
+        lv_obj_set_style_radius(volume_bar_obj_, 10, LV_PART_MAIN);
+        lv_obj_set_style_radius(volume_bar_obj_, 10, LV_PART_INDICATOR);
+    }
+    
+    static void VolumeGestureEventCb(lv_event_t* e) {
+        LichuangDevBoard* board = (LichuangDevBoard*)lv_event_get_user_data(e);
+        board->HandleVolumeGesture(e);
+    }
+    
+    
+    void HandleVolumeGesture(lv_event_t* e) {
+        lv_event_code_t code = lv_event_get_code(e);
+        static int16_t start_y = 0;
+        static int start_volume = 0;
+        static bool gesture_active = false;
+
+        // 在时钟界面（含切换模式）激活时，彻底忽略音量手势
+        if (clock_face_is_active()) {
+            return;
+        }
+        
+        if (code == LV_EVENT_PRESSED) {
+            lv_indev_t* indev = lv_indev_get_act();
+            lv_point_t point;
+            lv_indev_get_point(indev, &point);
+            start_y = point.y;
+            start_volume = GetAudioCodec()->output_volume();
+            gesture_active = true;
+            
+            // 显示音量条
+            lv_obj_clear_flag(volume_bar_obj_, LV_OBJ_FLAG_HIDDEN);
+            lv_bar_set_value(volume_bar_obj_, start_volume, LV_ANIM_OFF);
+            
+
+            
+        } else if (code == LV_EVENT_PRESSING && gesture_active) {
+            lv_indev_t* indev = lv_indev_get_act();
+            lv_point_t point;
+            lv_indev_get_point(indev, &point);
+            
+            // 计算音量变化（向上滑动增加音量，向下滑动减少音量）
+            int16_t delta_y = start_y - point.y; // 注意方向：向上为正
+            int volume_change = delta_y / 3; // 每3像素改变1%音量
+            int new_volume = start_volume + volume_change;
+            
+            // 限制音量范围
+            if (new_volume < 0) new_volume = 0;
+            if (new_volume > 100) new_volume = 100;
+            
+            // 只有音量真的变化了才更新（避免过于频繁的调用）
+            static int last_volume = -1;
+            if (new_volume != last_volume) {
+                last_volume = new_volume;
+                
+                // 更新音量
+                GetAudioCodec()->SetOutputVolume(new_volume);
+                lv_bar_set_value(volume_bar_obj_, new_volume, LV_ANIM_OFF);
+                
+                // 实时显示音量通知（每隔5%才显示，减少频繁更新）
+                if (new_volume % 5 == 0 || new_volume == 0 || new_volume == 100) {
+                    GetDisplay()->ShowNotification(("音量: " + std::to_string(new_volume) + "%").c_str());
+                }
+            }
+            
+        } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+            if (gesture_active) {
+                gesture_active = false;
+                
+                // 显示最终音量通知
+                int current_volume = GetAudioCodec()->output_volume();
+                GetDisplay()->ShowNotification(("音量设置: " + std::to_string(current_volume) + "%").c_str());
+                
+                // 立即隐藏音量条（不使用定时器，避免死锁）
+                lv_obj_add_flag(volume_bar_obj_, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+    }
+
+    // 启用/禁用触摸音量手势
+    void SetVolumeGestureEnabled(bool enabled) {
+        if (!volume_gesture_obj_) return;
+        if (enabled) {
+            lv_obj_clear_flag(volume_gesture_obj_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(volume_gesture_obj_, LV_OBJ_FLAG_CLICKABLE);
+        } else {
+            lv_obj_add_flag(volume_gesture_obj_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(volume_gesture_obj_, LV_OBJ_FLAG_CLICKABLE);
         }
     }
 
