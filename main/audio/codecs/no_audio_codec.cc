@@ -219,9 +219,8 @@ int NoAudioCodec::Write(const int16_t* data, int samples) {
     std::vector<int32_t> buffer(samples);
 
     // output_volume_: 0-100
-    // volume_factor_: 0-131072 (增加2倍增益以补偿直连I2S扬声器的音量不足)
-    // 改用线性音量而非平方，并增加2倍增益
-    int32_t volume_factor = (double(output_volume_) / 100.0) * 131072;
+    // volume_factor_: 0-65536
+    int32_t volume_factor = pow(double(output_volume_) / 100.0, 2) * 65536;
     for (int i = 0; i < samples; i++) {
         int64_t temp = int64_t(data[i]) * volume_factor; // 使用 int64_t 进行乘法运算
         if (temp > INT32_MAX) {

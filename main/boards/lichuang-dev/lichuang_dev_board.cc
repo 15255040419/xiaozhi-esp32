@@ -204,6 +204,7 @@ private:
         };
 
         if(touch_cfg.disp) {
+            if(touch_cfg.disp) {
             lvgl_port_add_touch(&touch_cfg);
         } else {
             ESP_LOGE(TAG, "Touch display is not initialized");

@@ -501,12 +501,13 @@ private:
         camera_ = new Esp32Camera(video_config);
         
         // 设置摄像头翻转，解决图像倒立问题
-        camera_->SetVFlip(true);  // 垂直翻转
+        //camera_->SetVFlip(true);  // 垂直翻转
         // camera_->SetHMirror(true);  // 如需水平镜像，取消此行注释
     }
 
 public:
-    FbmS3DualBoard() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN), boot_button_(BOOT_BUTTON_GPIO) {
+    FbmS3DualBoard() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, GPIO_NUM_NC, 0), boot_button_(BOOT_BUTTON_GPIO) {
+        // default_net_type=0 表示默认使用 WiFi，节省内存并加快启动
         InitializePowerSaveTimer();
         InitializeI2c();
         vTaskDelay(pdMS_TO_TICKS(100));
