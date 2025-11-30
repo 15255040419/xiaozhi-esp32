@@ -51,7 +51,7 @@ static inline int ClampSize(int size, int min_size, int max_size) {
 }
 
 MusicPlayerUI::MusicPlayerUI(lv_obj_t* parent, int width, int height, LvglTheme* theme, int status_bar_height)
-    : parent_(parent), container_(nullptr), song_info_label_(nullptr),
+    : parent_(parent), container_(nullptr), song_title_label_(nullptr), lyrics_label_(nullptr),
       control_container_(nullptr), prev_btn_(nullptr), play_pause_btn_(nullptr),
       next_btn_(nullptr), progress_container_(nullptr), current_time_label_(nullptr),
       progress_bar_(nullptr), duration_label_(nullptr),
@@ -191,10 +191,25 @@ void MusicPlayerUI::CreateVolumeControl(int height, int padding) {
     lv_color_t progress_bg = GET_PROGRESS_BG_COLOR(theme_);
     lv_obj_set_style_bg_color(volume_slider_, progress_bg, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(volume_slider_, LV_OPA_COVER, LV_PART_MAIN);
+    // 🔧 确保main部分无padding
+    lv_obj_set_style_pad_left(volume_slider_, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(volume_slider_, 0, LV_PART_MAIN);
+    
     lv_obj_set_style_bg_color(volume_slider_, GET_PRIMARY_COLOR(theme_), LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(volume_slider_, LV_OPA_COVER, LV_PART_INDICATOR);
+    // 🔧 确保indicator部分也无padding，与main完全对齐
+    lv_obj_set_style_pad_left(volume_slider_, 0, LV_PART_INDICATOR);
+    lv_obj_set_style_pad_right(volume_slider_, 0, LV_PART_INDICATOR);
+    
     lv_obj_set_style_bg_color(volume_slider_, GET_PRIMARY_COLOR(theme_), LV_PART_KNOB);
     lv_obj_set_style_bg_opa(volume_slider_, LV_OPA_COVER, LV_PART_KNOB);
+    // 🔧 修复：设置knob大小和样式，防止在100%时超出边界且不影响对齐
+    lv_obj_set_style_pad_all(volume_slider_, 0, LV_PART_KNOB);  
+    lv_obj_set_style_radius(volume_slider_, LV_RADIUS_CIRCLE, LV_PART_KNOB);
+    // 设置knob的宽高与滑块高度一致，不超出
+    lv_obj_set_style_width(volume_slider_, height * 0.4, LV_PART_KNOB);
+    lv_obj_set_style_height(volume_slider_, height * 0.4, LV_PART_KNOB);
+    
     lv_obj_add_event_cb(volume_slider_, VolumeEventCb, LV_EVENT_VALUE_CHANGED, this);
     
     // 音量数值 - 固定宽度，左对齐
@@ -225,27 +240,47 @@ void MusicPlayerUI::CreateSongInfoArea(int height, int padding) {
     }
     lv_obj_set_style_radius(info_box, padding / 2, 0);
     
-    // 容器使用flex布局，内容垂直居中
+    // 容器使用flex布局，内容从顶部开始排列（歌名固定在顶部）
     lv_obj_set_flex_flow(info_box, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(info_box, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(info_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(info_box, 5, 0);  // 歌名和歌词之间的间距
+    lv_obj_set_style_pad_top(info_box, 10, 0);  // 顶部留一些间距
     
-    // 在容器内创建label，高度自适应
-    song_info_label_ = lv_label_create(info_box);
-    lv_obj_set_width(song_info_label_, LV_PCT(100));
-    lv_obj_set_style_bg_opa(song_info_label_, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_pad_all(song_info_label_, 0, 0);
-    lv_obj_set_style_text_align(song_info_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_long_mode(song_info_label_, LV_LABEL_LONG_WRAP);
+    // 创建歌名label（固定不动）
+    song_title_label_ = lv_label_create(info_box);
+    lv_obj_set_width(song_title_label_, LV_PCT(90));  // 留一些边距
+    lv_obj_set_style_bg_opa(song_title_label_, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_pad_all(song_title_label_, 0, 0);
+    lv_obj_set_style_text_align(song_title_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(song_title_label_, LV_LABEL_LONG_DOT);  // 超长显示省略号，不滚动
     
     if (theme_) {
-        lv_obj_set_style_text_font(song_info_label_, theme_->text_font()->font(), 0);
-        lv_obj_set_style_text_color(song_info_label_, theme_->text_color(), 0);
+        lv_obj_set_style_text_font(song_title_label_, theme_->text_font()->font(), 0);
+        lv_obj_set_style_text_color(song_title_label_, theme_->text_color(), 0);
     } else {
-        lv_obj_set_style_text_font(song_info_label_, LV_FONT_DEFAULT, 0);
-        lv_obj_set_style_text_color(song_info_label_, lv_color_hex(COLOR_TEXT_DEFAULT), 0);
+        lv_obj_set_style_text_font(song_title_label_, LV_FONT_DEFAULT, 0);
+        lv_obj_set_style_text_color(song_title_label_, lv_color_hex(COLOR_TEXT_DEFAULT), 0);
     }
+    lv_label_set_text(song_title_label_, "音乐加载中...");
     
-    lv_label_set_text(song_info_label_, "音乐加载中...");
+    // 创建歌词label（可更新）
+    lyrics_label_ = lv_label_create(info_box);
+    lv_obj_set_width(lyrics_label_, LV_PCT(90));
+    lv_obj_set_style_bg_opa(lyrics_label_, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_pad_all(lyrics_label_, 0, 0);
+    lv_obj_set_style_text_align(lyrics_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(lyrics_label_, LV_LABEL_LONG_WRAP);  // 歌词可以换行显示
+    
+    if (theme_) {
+        lv_obj_set_style_text_font(lyrics_label_, theme_->text_font()->font(), 0);
+        lv_obj_set_style_text_color(lyrics_label_, theme_->text_color(), 0);
+        lv_obj_set_style_text_opa(lyrics_label_, LV_OPA_70, 0);  // 歌词透明度稍低，区分歌名
+    } else {
+        lv_obj_set_style_text_font(lyrics_label_, LV_FONT_DEFAULT, 0);
+        lv_obj_set_style_text_color(lyrics_label_, lv_color_hex(COLOR_TEXT_DEFAULT), 0);
+        lv_obj_set_style_text_opa(lyrics_label_, LV_OPA_70, 0);
+    }
+    lv_label_set_text(lyrics_label_, "");
 }
 
 void MusicPlayerUI::CreateControlButtons(int height, int padding) {
@@ -342,7 +377,8 @@ void MusicPlayerUI::DestroyUI() {
     if (container_) {
         lv_obj_del(container_);
         container_ = nullptr;
-        song_info_label_ = nullptr;
+        song_title_label_ = nullptr;
+        lyrics_label_ = nullptr;
         control_container_ = nullptr;
         prev_btn_ = nullptr;
         play_pause_btn_ = nullptr;
@@ -402,34 +438,30 @@ void MusicPlayerUI::SetPlayState(PlayState state) {
 }
 
 void MusicPlayerUI::UpdateSongInfoDisplay() {
-    if (!song_info_label_) return;
+    if (!song_title_label_ || !lyrics_label_) return;
     
-    std::string display_text = "";
-    
-    if (!current_song_title_.empty() || !current_artist_.empty()) {
-        if (!current_song_title_.empty() && !current_artist_.empty()) {
-            display_text = current_song_title_ + " - " + current_artist_;
-        } else if (!current_song_title_.empty()) {
-            display_text = current_song_title_;
-        } else if (!current_artist_.empty()) {
-            display_text = current_artist_;
-        }
-        
-        if (!current_lyrics_.empty()) {
-            display_text += "\n" + current_lyrics_;
-        }
-    } else if (!current_lyrics_.empty()) {
-        display_text = current_lyrics_;
+    // 更新歌名（固定不动）
+    std::string title_text = "";
+    if (!current_song_title_.empty() && !current_artist_.empty()) {
+        title_text = current_song_title_ + " - " + current_artist_;
+    } else if (!current_song_title_.empty()) {
+        title_text = current_song_title_;
+    } else if (!current_artist_.empty()) {
+        title_text = current_artist_;
     } else {
-        display_text = "音乐加载中...";
+        title_text = "音乐加载中...";
     }
     
-    const char* current_text = lv_label_get_text(song_info_label_);
-    if (current_text && display_text == current_text) {
-        return;
+    const char* current_title = lv_label_get_text(song_title_label_);
+    if (!current_title || title_text != current_title) {
+        lv_label_set_text(song_title_label_, title_text.c_str());
     }
     
-    lv_label_set_text(song_info_label_, display_text.c_str());
+    // 更新歌词（可更新）
+    const char* current_lyric = lv_label_get_text(lyrics_label_);
+    if (!current_lyric || current_lyrics_ != current_lyric) {
+        lv_label_set_text(lyrics_label_, current_lyrics_.c_str());
+    }
 }
 
 void MusicPlayerUI::SetDuration(const char* duration) {
@@ -552,10 +584,15 @@ void MusicPlayerUI::UpdateTheme(LvglTheme* theme) {
     
     theme_ = theme;
     
-    if (song_info_label_) {
-        lv_obj_set_style_text_font(song_info_label_, theme_->text_font()->font(), 0);
-        lv_obj_set_style_text_color(song_info_label_, theme_->text_color(), 0);
-        lv_obj_set_style_bg_color(song_info_label_, GET_PROGRESS_BG_COLOR(theme_), 0);
+    if (song_title_label_) {
+        lv_obj_set_style_text_font(song_title_label_, theme_->text_font()->font(), 0);
+        lv_obj_set_style_text_color(song_title_label_, theme_->text_color(), 0);
+    }
+    
+    if (lyrics_label_) {
+        lv_obj_set_style_text_font(lyrics_label_, theme_->text_font()->font(), 0);
+        lv_obj_set_style_text_color(lyrics_label_, theme_->text_color(), 0);
+        lv_obj_set_style_text_opa(lyrics_label_, LV_OPA_70, 0);
     }
     
     if (music_icon_label_) {

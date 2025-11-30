@@ -53,7 +53,8 @@ private:
     // UI组件
     lv_obj_t* parent_;
     lv_obj_t* container_;
-    lv_obj_t* song_info_label_;  // 合并的歌名+歌词标签
+    lv_obj_t* song_title_label_;  // 歌名标签（固定不动）
+    lv_obj_t* lyrics_label_;      // 歌词标签（可更新）
     lv_obj_t* control_container_;
     lv_obj_t* prev_btn_;
     lv_obj_t* play_pause_btn_;
@@ -103,7 +104,7 @@ private:
     void CreateControlButtons(int height, int padding);
     void CreateProgressBar(int height, int padding);
     void UpdatePlayPauseButton();
-    void UpdateSongInfoDisplay();  // 更新合并的歌名+歌词显示
+    void UpdateSongInfoDisplay();  // 更新歌名和歌词显示
 
     // 静态事件回调
     static void PlayPauseEventCb(lv_event_t* e);

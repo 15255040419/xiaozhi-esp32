@@ -274,7 +274,7 @@ bool Esp32Music::Download(const std::string& song_name, const std::string& artis
     vTaskDelay(pdMS_TO_TICKS(50)); // 等待语音链路停止
     
     // 第一步：请求stream_pcm接口获取音频信息
-    std::string base_url = "http://http-embedded-music.miao-lab.top:2233";
+    std::string base_url = "http://110.42.59.54:2233"; //http://http-embedded-music.miao-lab.top:2233
     std::string full_url = base_url + "/stream_pcm?song=" + url_encode(song_name) + "&artist=" + url_encode(artist_name);
     
     ESP_LOGI(TAG, "Request URL: %s", full_url.c_str());
@@ -294,6 +294,7 @@ bool Esp32Music::Download(const std::string& song_name, const std::string& artis
     if (!http->Open("GET", full_url)) {
         ESP_LOGE(TAG, "Failed to connect to music API (timeout or network error)");
         Application::GetInstance().Alert("network", "抱歉，无法连接到音乐服务，请检查网络");
+        audio_service.EnableVoiceProcessing(true); // 恢复语音处理
         return false;
     }
     
@@ -309,10 +310,11 @@ bool Esp32Music::Download(const std::string& song_name, const std::string& artis
         }
         Application::GetInstance().Alert("music", error_msg);
         http->Close();
+        audio_service.EnableVoiceProcessing(true); // 恢复语音处理
         return false;
     }
     
-    // 🔧 修复: 读取响应数据，限制最大读取大小防止内存溢出
+    // 修复: 读取响应数据，限制最大读取大小防止内存溢出
     const size_t MAX_RESPONSE_SIZE = 10 * 1024;  // 最多读取10KB
     last_downloaded_data_.clear();
     last_downloaded_data_.reserve(2048);  // 预分配2KB
@@ -341,6 +343,7 @@ bool Esp32Music::Download(const std::string& song_name, const std::string& artis
     if (last_downloaded_data_.find("ESP32动态密钥验证失败") != std::string::npos) {
         ESP_LOGE(TAG, "Authentication failed for song: %s", song_name.c_str());
         Application::GetInstance().Alert("warning", "抱歉，设备认证失败，请重试");
+        audio_service.EnableVoiceProcessing(true); // 恢复语音处理
         return false;
     }
     
@@ -370,16 +373,44 @@ bool Esp32Music::Download(const std::string& song_name, const std::string& artis
             
             // 检查audio_url是否有效
             if (cJSON_IsString(audio_url) && audio_url->valuestring && strlen(audio_url->valuestring) > 0) {
-                ESP_LOGI(TAG, "Audio URL path: %s", audio_url->valuestring);
+                std::string audio_path = audio_url->valuestring;
+                ESP_LOGI(TAG, "Audio URL path: %s", audio_path.c_str());
+                
+                // 验证URL完整性：必须包含具体路径，不能只是域名
+                bool is_valid_url = false;
+                if (audio_path.find("/stream") != std::string::npos ||
+                    audio_path.find(".mp3") != std::string::npos ||
+                    audio_path.find(".m4a") != std::string::npos ||
+                    audio_path.find(".flac") != std::string::npos ||
+                    audio_path.find(".wav") != std::string::npos) {
+                    is_valid_url = true;
+                } else {
+                    // 检查URL是否只是域名（没有路径）
+                    size_t last_slash = audio_path.find_last_of('/');
+                    if (last_slash != std::string::npos && last_slash > 8) {  // "http://" 之后还有路径
+                        std::string path_part = audio_path.substr(last_slash + 1);
+                        if (!path_part.empty()) {
+                            is_valid_url = true;  // 至少有路径部分
+                        }
+                    }
+                }
+                
+                if (!is_valid_url) {
+                    ESP_LOGE(TAG, "Invalid audio URL (no path or file): %s", audio_path.c_str());
+                    std::string error_message = "抱歉，没有找到歌曲《" + song_name + "》";
+                    Application::GetInstance().Alert("music", error_message.c_str());
+                    cJSON_Delete(response_json);
+                    audio_service.EnableVoiceProcessing(true); // 恢复语音处理
+                    return false;
+                }
                 
                 // 第二步：直接使用audio_url播放音乐
-                std::string audio_path = audio_url->valuestring;
                 current_music_url_ = audio_path;
                 
                 ESP_LOGI(TAG, "Starting streaming playback for: %s", song_name.c_str());
                 song_name_displayed_ = false;  // 重置歌名显示标志
                 
-                // 🔧 关键：不要调用 AbortSpeaking，直接启动播放即可
+                // 关键：不要调用 AbortSpeaking，直接启动播放即可
                 // AbortSpeaking 会导致状态切换到 listening，让 AI 误以为可以继续对话
                 // 语音处理已经在函数开头禁用了，直接播放音乐
                 
@@ -423,6 +454,7 @@ bool Esp32Music::Download(const std::string& song_name, const std::string& artis
                 Application::GetInstance().Alert("music", error_message.c_str());
                 
                 cJSON_Delete(response_json);
+                audio_service.EnableVoiceProcessing(true); // 恢复语音处理
                 return false;
             }
         } else {
@@ -434,6 +466,7 @@ bool Esp32Music::Download(const std::string& song_name, const std::string& artis
         Application::GetInstance().Alert("warning", "抱歉，音乐服务暂时不可用");
     }
     
+    audio_service.EnableVoiceProcessing(true); // 恢复语音处理
     return false;
 }
 
