@@ -18,7 +18,7 @@ public:
         PAUSED = 2
     };
 
-    MusicPlayerUI(lv_obj_t* parent, int width, int height, LvglTheme* theme);
+    MusicPlayerUI(lv_obj_t* parent, int width, int height, LvglTheme* theme, int status_bar_height = 0);
     ~MusicPlayerUI();
 
     // 显示/隐藏音乐播放器
@@ -72,6 +72,7 @@ private:
     PlayState play_state_;
     int width_;
     int height_;
+    int status_bar_height_;
     int current_volume_;
     
     // 主题
@@ -97,6 +98,10 @@ private:
     // 内部方法
     void CreateUI();
     void DestroyUI();
+    void CreateVolumeControl(int height, int padding);
+    void CreateSongInfoArea(int height, int padding);
+    void CreateControlButtons(int height, int padding);
+    void CreateProgressBar(int height, int padding);
     void UpdatePlayPauseButton();
     void UpdateSongInfoDisplay();  // 更新合并的歌名+歌词显示
 

@@ -1017,6 +1017,9 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
     // 根据内容是否为空来显示或隐藏聊天标签
     if (content != nullptr && strlen(content) > 0) {
         lv_obj_remove_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);  // 显示标签
+        // 重新对齐到底部，确保文字始终在底部显示
+        int bottom_margin = (height_ <= 128) ? -5 : -20;
+        lv_obj_align(chat_message_label_, LV_ALIGN_BOTTOM_MID, 0, bottom_margin);
     } else {
         lv_obj_add_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);     // 隐藏标签
     }
@@ -1314,12 +1317,15 @@ void LcdDisplay::UpdateMusicState(const char* title, const char* artist, bool is
                 return;
             }
             
-            music_player_ui_ = std::make_unique<MusicPlayerUI>(lv_screen_active(), width_, height_, lvgl_theme);
+            // 获取状态栏的实际高度
+            int status_bar_height = status_bar_ ? lv_obj_get_height(status_bar_) : 0;
+            
+            music_player_ui_ = std::make_unique<MusicPlayerUI>(lv_screen_active(), width_, height_, lvgl_theme, status_bar_height);
             if (!music_player_ui_) {
                 ESP_LOGE(TAG, "Failed to create music player UI");
                 return;
             }
-            ESP_LOGI(TAG, "Created music player UI");
+            ESP_LOGI(TAG, "Created music player UI with status_bar_height=%d", status_bar_height);
         }
 
         // 每次更新都设置回调，避免 UI 在其它路径创建时未设置回调
@@ -1390,6 +1396,11 @@ void LcdDisplay::UpdateMusicState(const char* title, const char* artist, bool is
         EnableTouchVolumeControl(false);
         StartMusicProgressUpdate();
         
+        // 设置状态栏背景色与播放器一致（半透明）
+        if (status_bar_) {
+            lv_obj_set_style_bg_opa(status_bar_, LV_OPA_30, 0);
+        }
+        
         // 隐藏聊天界面元素（表情显示由 ApplyEmojiVisibility 统一控制）
         if (chat_message_label_) lv_obj_add_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
         if (preview_image_) lv_obj_add_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
@@ -1402,8 +1413,14 @@ void LcdDisplay::UpdateMusicState(const char* title, const char* artist, bool is
         
         if (music_player_ui_) {
             music_player_ui_->Hide();
+            music_player_ui_.reset();  // 🔧 释放内存，防止泄漏
             EnableTouchVolumeControl(true);
             StopMusicProgressUpdate();
+        }
+        
+        // 恢复状态栏为透明背景
+        if (status_bar_) {
+            lv_obj_set_style_bg_opa(status_bar_, LV_OPA_TRANSP, 0);
         }
         
         // 清空聊天界面的音乐信息（如果有）
@@ -1412,7 +1429,7 @@ void LcdDisplay::UpdateMusicState(const char* title, const char* artist, bool is
             lv_label_set_text(chat_message_label_, "");
         }
         
-        ESP_LOGI(TAG, "Music player UI is now hidden");
+        ESP_LOGI(TAG, "Music player UI hidden and memory released");
         // 播放结束后的界面切换：
         // 如果当前处于交互流程中（非空闲态，如被唤醒/手动打断进入连接/聆听/说话），
         // 直接进入聊天界面，避免先闪一下时钟界面再进入聊天界面。
@@ -1453,19 +1470,27 @@ void LcdDisplay::ShowMusicPlayer() {
                 return;
             }
             
-            music_player_ui_ = std::make_unique<MusicPlayerUI>(lv_screen_active(), width_, height_, lvgl_theme);
+            // 获取状态栏的实际高度
+            int status_bar_height = status_bar_ ? lv_obj_get_height(status_bar_) : 0;
+            
+            music_player_ui_ = std::make_unique<MusicPlayerUI>(lv_screen_active(), width_, height_, lvgl_theme, status_bar_height);
             if (!music_player_ui_) {
                 ESP_LOGE(TAG, "Failed to create music player UI");
                 return;
             }
             
-            ESP_LOGI(TAG, "Created music player UI");
+            ESP_LOGI(TAG, "Created music player UI with status_bar_height=%d", status_bar_height);
         }
         
         // 显示播放器
         music_player_ui_->Show();
         EnableTouchVolumeControl(false);
         ApplyEmojiVisibility();
+        
+        // 设置状态栏背景色与播放器一致（半透明）
+        if (status_bar_) {
+            lv_obj_set_style_bg_opa(status_bar_, LV_OPA_30, 0);
+        }
         
         // 隐藏其他界面元素
         if (emoji_box_) lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
@@ -1494,6 +1519,11 @@ void LcdDisplay::HideMusicPlayer() {
         // 隐藏并销毁UI
         music_player_ui_->Hide();
         music_player_ui_.reset();
+        
+        // 恢复状态栏为透明背景
+        if (status_bar_) {
+            lv_obj_set_style_bg_opa(status_bar_, LV_OPA_TRANSP, 0);
+        }
         
         // 恢复触摸控制和表情显示
         EnableTouchVolumeControl(true);

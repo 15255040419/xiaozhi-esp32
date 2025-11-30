@@ -2,7 +2,7 @@
     "target": "esp32s3",
     "builds": [
         {
-            "name": "lichuang-dev-plus",
+            "name": "fbm-2.0-v2",
             "sdkconfig_append": [
                 "CONFIG_USE_DEVICE_AEC=y",
                 "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/16m.csv\"",

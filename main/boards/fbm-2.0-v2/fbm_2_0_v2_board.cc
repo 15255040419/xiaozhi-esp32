@@ -23,7 +23,7 @@
 extern "C" bool clock_face_is_active();
 
 
-#define TAG "LichuangDevPlusBoard"
+#define TAG "Fbm20V2Board"
 
 class Pmic : public Axp2101 {
 public:
@@ -127,12 +127,12 @@ public:
 };
 
 
-class LichuangDevPlusAudioCodec : public BoxAudioCodec {
+class Fbm20V2AudioCodec : public BoxAudioCodec {
 private:
     Aw9523b* aw9523b_;
 
 public:
-    LichuangDevPlusAudioCodec(i2c_master_bus_handle_t i2c_bus, Aw9523b* aw9523b) 
+    Fbm20V2AudioCodec(i2c_master_bus_handle_t i2c_bus, Aw9523b* aw9523b) 
         : BoxAudioCodec(i2c_bus, 
                        AUDIO_INPUT_SAMPLE_RATE, 
                        AUDIO_OUTPUT_SAMPLE_RATE,
@@ -159,7 +159,7 @@ public:
 };
 
 
-class LichuangDevPlusBoard : public DualNetworkBoard {
+class Fbm20V2Board : public DualNetworkBoard {
 private:
     i2c_master_bus_handle_t i2c_bus_;
     Pmic* pmic_;
@@ -322,7 +322,7 @@ private:
     }
     
     static void VolumeGestureEventCb(lv_event_t* e) {
-        LichuangDevPlusBoard* board = (LichuangDevPlusBoard*)lv_event_get_user_data(e);
+        Fbm20V2Board* board = (Fbm20V2Board*)lv_event_get_user_data(e);
         board->HandleVolumeGesture(e);
     }
     
@@ -504,7 +504,7 @@ private:
     }
     
 public:
-    LichuangDevPlusBoard() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, GPIO_NUM_NC, 0), boot_button_(BOOT_BUTTON_GPIO){
+    Fbm20V2Board() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, GPIO_NUM_NC, 0), boot_button_(BOOT_BUTTON_GPIO){
         // default_net_type=0 表示默认使用 WiFi，节省内存并加快启动
         InitializePowerSaveTimer();
         InitializeI2c();
@@ -520,7 +520,7 @@ public:
     }
 
     virtual AudioCodec* GetAudioCodec() override {
-        static LichuangDevPlusAudioCodec audio_codec(
+        static Fbm20V2AudioCodec audio_codec(
             i2c_bus_,
             aw9523b_);
         return &audio_codec;
@@ -575,4 +575,4 @@ public:
     }
 };
 
-DECLARE_BOARD(LichuangDevPlusBoard);
+DECLARE_BOARD(Fbm20V2Board);
