@@ -69,6 +69,7 @@ public:
 
     // 新增：接收外部音频数据（如音乐播放）
     void AddAudioData(AudioStreamPacket&& packet);
+    void ClearAudioQueue();  // 🔧 新增：清空音频解码队列
     void PlaySound(const std::string_view& sound);
     AudioService& GetAudioService() { return audio_service_; }
 

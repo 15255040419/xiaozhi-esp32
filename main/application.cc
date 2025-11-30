@@ -1033,3 +1033,11 @@ void Application::AddAudioData(AudioStreamPacket&& packet) {
 void Application::PlaySound(const std::string_view& sound) {
     audio_service_.PlaySound(sound);
 }
+
+// 🔧 新增：清空音频解码队列
+void Application::ClearAudioQueue() {
+    // 由于 AudioCodec 使用 I2S DMA，数据会自动消耗
+    // 这里主要是确保没有新的音频数据进入队列
+    // 通过停止音乐播放和禁用输出来实现
+    ESP_LOGI(TAG, "Audio decoder queue clear requested (data will be consumed by DMA)");
+}

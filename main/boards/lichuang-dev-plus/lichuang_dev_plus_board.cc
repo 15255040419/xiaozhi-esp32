@@ -174,13 +174,13 @@ private:
     SdCard sdcard_;
 
     void InitializePowerSaveTimer() {
-        power_save_timer_ = new PowerSaveTimer(-1, 60, 300);
+        power_save_timer_ = new PowerSaveTimer(-1, 300, 600);
         power_save_timer_->OnEnterSleepMode([this]() {
             ESP_LOGI(TAG, "Enabling sleep mode");
             auto display = GetDisplay();
             display->SetChatMessage("system", "");
             display->SetEmotion("sleepy");
-            GetBacklight()->SetBrightness(30); });
+            GetBacklight()->SetBrightness(40); });
         power_save_timer_->OnExitSleepMode([this]() {
             auto display = GetDisplay();
             display->SetChatMessage("system", "");
@@ -504,7 +504,8 @@ private:
     }
     
 public:
-    LichuangDevPlusBoard() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN), boot_button_(BOOT_BUTTON_GPIO) {
+    LichuangDevPlusBoard() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, GPIO_NUM_NC, 0), boot_button_(BOOT_BUTTON_GPIO){
+        // default_net_type=0 表示默认使用 WiFi，节省内存并加快启动
         InitializePowerSaveTimer();
         InitializeI2c();
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -513,7 +514,7 @@ public:
         InitializeSpi();
         InitializeSt7789Display();
         InitializeButtons();
-        //InitializeTouch();
+        InitializeTouch();
         InitializeCamera();
         InitializeSdCard();
     }
