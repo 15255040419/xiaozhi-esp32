@@ -45,6 +45,7 @@ protected:
     // 时钟界面（PixelThinking）
     void* pixel_thinking_clock_ = nullptr;
     bool clock_visible_ = false;
+    bool clock_available_ = false;  // 缓存时钟是否可用（开机时检查一次）
     void EnsureClockFaceInitialized();
     void HideClockFace();
 
@@ -71,7 +72,8 @@ public:
 
     // 显式界面切换函数
     void ShowChatInterface();
-    bool CanShowClockFace() const;
+    bool CanShowClockFace() const;  // 检查缓存的时钟可用状态
+    bool CheckClockAvailability() const;  // 实际检查时钟可用性（仅开机时调用）
     void ShowClockFace();
     
     // 统一管理表情显隐

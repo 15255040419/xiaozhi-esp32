@@ -126,6 +126,14 @@ LcdDisplay::LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_
     std::string theme_name = settings.GetString("theme", "light");
     current_theme_ = LvglThemeManager::GetInstance().GetTheme(theme_name);
 
+    // 开机时检查一次时钟是否可用（SD卡和WiFi状态）
+    clock_available_ = CheckClockAvailability();
+    if (clock_available_) {
+        ESP_LOGI(TAG, "Clock face is available");
+    } else {
+        ESP_LOGI(TAG, "Clock face is not available (will use chat interface)");
+    }
+
     // Create a timer to hide the preview image
     esp_timer_create_args_t preview_timer_args = {
         .callback = [](void* arg) {
@@ -1562,10 +1570,26 @@ void LcdDisplay::UpdateMusicLyrics(const char* lyrics) {
         return;
     }
     
-    // 音乐播放器模式
+    // 音乐播放器模式 - 使用异步调用避免阻塞音频线程
     if (music_player_ui_) {
         try {
-            music_player_ui_->SetLyrics(lyrics);
+            // 复制歌词字符串到堆上，避免栈变量在异步调用时失效
+            std::string* lyric_copy = new std::string(lyrics ? lyrics : "");
+            MusicPlayerUI* ui_ptr = music_player_ui_.get();
+            
+            // 使用 LVGL 单次定时器异步更新 UI（在 LVGL 线程中执行）
+            lv_timer_t* timer = lv_timer_create([](lv_timer_t* t) {
+                auto* data = static_cast<std::pair<MusicPlayerUI*, std::string*>*>(lv_timer_get_user_data(t));
+                if (data && data->first && data->second) {
+                    data->first->SetLyrics(data->second->c_str());
+                    delete data->second;  // 释放字符串
+                }
+                delete data;  // 释放pair
+                lv_timer_del(t);  // 删除单次定时器
+            }, 0, new std::pair<MusicPlayerUI*, std::string*>(ui_ptr, lyric_copy));
+            
+            lv_timer_set_repeat_count(timer, 1);  // 只执行一次
+            
             return;
         } catch (const std::exception& e) {
             ESP_LOGE(TAG, "Error updating lyrics in player UI: %s", e.what());
@@ -1753,11 +1777,11 @@ void LcdDisplay::ShowChatInterface() {
     }
 }
 
-// 检查是否可以显示时钟界面
-bool LcdDisplay::CanShowClockFace() const {
+// 检查时钟可用性（仅开机时调用一次）
+bool LcdDisplay::CheckClockAvailability() const {
     // 检查SD卡
     if (!IsSdMounted()) {
-        ESP_LOGI(TAG, "Cannot show clock: SD card not mounted");
+        ESP_LOGI(TAG, "Clock not available: SD card not mounted");
         return false;
     }
     
@@ -1766,12 +1790,17 @@ bool LcdDisplay::CanShowClockFace() const {
     if (board.GetBoardType() == "wifi" || board.GetBoardType() == "dual") {
         auto icon = board.GetNetworkStateIcon();
         if (icon && std::string(icon) == FONT_AWESOME_WIFI_SLASH) {
-            ESP_LOGI(TAG, "Cannot show clock: WiFi not connected");
+            ESP_LOGI(TAG, "Clock not available: WiFi not connected");
             return false;
         }
     }
     
     return true;
+}
+
+// 检查是否可以显示时钟界面（使用缓存的结果）
+bool LcdDisplay::CanShowClockFace() const {
+    return clock_available_;
 }
 
 void LcdDisplay::UpdateMusicTime(const char* current_time, const char* duration) {

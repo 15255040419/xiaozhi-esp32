@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include "lvgl_theme.h"
 #include "board.h"
+#include <font_awesome.h>
 #include <algorithm>
 
 static const char* TAG = "MusicPlayerUI";
@@ -11,7 +12,6 @@ static const char* TAG = "MusicPlayerUI";
 #define SYMBOL_PAUSE    "\xEF\x81\x8C"
 #define SYMBOL_PREVIOUS "\xEF\x81\x88"
 #define SYMBOL_NEXT     "\xEF\x81\x91"
-#define SYMBOL_VOLUME   "\xEF\x80\xA6"
 
 // 颜色定义
 #define COLOR_PRIMARY           0x2196F3
@@ -168,7 +168,7 @@ void MusicPlayerUI::CreateVolumeControl(int height, int padding) {
     
     lv_obj_set_flex_flow(volume_container_, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(volume_container_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(volume_container_, padding / 2, 0);
+    lv_obj_set_style_pad_column(volume_container_, padding, 0);  // 增加列间距
     
     // 计算标签固定宽度（和进度条区域的时间标签保持一致）
     int label_width = std::max(40, CalcPercent(width_, 10));
@@ -176,39 +176,43 @@ void MusicPlayerUI::CreateVolumeControl(int height, int padding) {
     // 音量图标 - 固定宽度，右对齐
     music_icon_label_ = lv_label_create(volume_container_);
     lv_obj_set_width(music_icon_label_, label_width);
-    lv_label_set_text(music_icon_label_, "Vol");
-    lv_obj_set_style_text_font(music_icon_label_, GET_DEFAULT_FONT(), 0);
+    lv_label_set_text(music_icon_label_, FONT_AWESOME_VOLUME_HIGH);  // 🔊 喇叭图标
+    lv_obj_set_style_text_font(music_icon_label_, GET_ICON_FONT(theme_), 0);  // 使用图标字体
     lv_obj_set_style_text_color(music_icon_label_, GET_TEXT_COLOR(theme_), 0);
     lv_obj_set_style_text_align(music_icon_label_, LV_TEXT_ALIGN_RIGHT, 0);
     
-    // 音量滑块 - 与进度条宽度和高度完全一致
+    // 音量滑块 - 宽度与进度条一致，高度需要容纳更大的滑块
     volume_slider_ = lv_slider_create(volume_container_);
     int slider_width = std::max(80, width_ - (label_width * 2) - (padding * 3));  // 和进度条相同的计算方式
-    lv_obj_set_size(volume_slider_, slider_width, height * 0.4);  // 和进度条相同高度
+    int bar_height = height * 0.4;
+    int knob_size = bar_height * 1.8;  // 滑块是进度条的1.8倍
+    lv_obj_set_size(volume_slider_, slider_width, knob_size);  // 高度设置为滑块大小，避免裁剪
     lv_slider_set_range(volume_slider_, 0, 100);
     lv_slider_set_value(volume_slider_, current_volume_, LV_ANIM_OFF);
     
     lv_color_t progress_bg = GET_PROGRESS_BG_COLOR(theme_);
     lv_obj_set_style_bg_color(volume_slider_, progress_bg, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(volume_slider_, LV_OPA_COVER, LV_PART_MAIN);
-    // 🔧 确保main部分无padding
+    // 🔧 设置MAIN部分（进度条背景）的高度
+    lv_obj_set_style_height(volume_slider_, bar_height, LV_PART_MAIN);
     lv_obj_set_style_pad_left(volume_slider_, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_right(volume_slider_, 0, LV_PART_MAIN);
     
-    lv_obj_set_style_bg_color(volume_slider_, GET_PRIMARY_COLOR(theme_), LV_PART_INDICATOR);
+    // 🎨 音量进度条使用黑色，与时间进度条区分
+    lv_obj_set_style_bg_color(volume_slider_, lv_color_black(), LV_PART_INDICATOR);  // 黑色
     lv_obj_set_style_bg_opa(volume_slider_, LV_OPA_COVER, LV_PART_INDICATOR);
+    lv_obj_set_style_height(volume_slider_, bar_height, LV_PART_INDICATOR);  // 进度条高度
     // 🔧 确保indicator部分也无padding，与main完全对齐
     lv_obj_set_style_pad_left(volume_slider_, 0, LV_PART_INDICATOR);
     lv_obj_set_style_pad_right(volume_slider_, 0, LV_PART_INDICATOR);
     
-    lv_obj_set_style_bg_color(volume_slider_, GET_PRIMARY_COLOR(theme_), LV_PART_KNOB);
+    // 🎚️ 滑块样式 - 黑色圆形滑块，比进度条大1.8倍
+    lv_obj_set_style_width(volume_slider_, knob_size, LV_PART_KNOB);
+    lv_obj_set_style_height(volume_slider_, knob_size, LV_PART_KNOB);
+    lv_obj_set_style_bg_color(volume_slider_, lv_color_black(), LV_PART_KNOB);  // 黑色
     lv_obj_set_style_bg_opa(volume_slider_, LV_OPA_COVER, LV_PART_KNOB);
-    // 🔧 修复：设置knob大小和样式，防止在100%时超出边界且不影响对齐
-    lv_obj_set_style_pad_all(volume_slider_, 0, LV_PART_KNOB);  
+    lv_obj_set_style_pad_all(volume_slider_, 0, LV_PART_KNOB);
     lv_obj_set_style_radius(volume_slider_, LV_RADIUS_CIRCLE, LV_PART_KNOB);
-    // 设置knob的宽高与滑块高度一致，不超出
-    lv_obj_set_style_width(volume_slider_, height * 0.4, LV_PART_KNOB);
-    lv_obj_set_style_height(volume_slider_, height * 0.4, LV_PART_KNOB);
     
     lv_obj_add_event_cb(volume_slider_, VolumeEventCb, LV_EVENT_VALUE_CHANGED, this);
     
@@ -222,7 +226,7 @@ void MusicPlayerUI::CreateVolumeControl(int height, int padding) {
 }
 
 void MusicPlayerUI::CreateSongInfoArea(int height, int padding) {
-    // 创建外层容器，固定高度，带背景色
+    // 创建外层容器，固定高度，透明背景
     lv_obj_t* info_box = lv_obj_create(container_);
     lv_obj_add_flag(info_box, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_set_size(info_box, LV_PCT(90), height);
@@ -230,29 +234,25 @@ void MusicPlayerUI::CreateSongInfoArea(int height, int padding) {
     lv_obj_set_style_border_width(info_box, 0, 0);
     lv_obj_clear_flag(info_box, LV_OBJ_FLAG_SCROLLABLE);
     
-    // 容器背景样式
-    if (theme_) {
-        lv_obj_set_style_bg_color(info_box, GET_PROGRESS_BG_COLOR(theme_), 0);
-        lv_obj_set_style_bg_opa(info_box, LV_OPA_60, 0);
-    } else {
-        lv_obj_set_style_bg_color(info_box, lv_color_hex(COLOR_PROGRESS_BG_LIGHT), 0);
-        lv_obj_set_style_bg_opa(info_box, LV_OPA_60, 0);
-    }
-    lv_obj_set_style_radius(info_box, padding / 2, 0);
+    // 容器背景样式 - 完全透明
+    lv_obj_set_style_bg_opa(info_box, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_opa(info_box, LV_OPA_TRANSP, 0);
     
-    // 容器使用flex布局，内容从顶部开始排列（歌名固定在顶部）
+    // 容器使用flex布局，从顶部开始排列
     lv_obj_set_flex_flow(info_box, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(info_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_row(info_box, 5, 0);  // 歌名和歌词之间的间距
-    lv_obj_set_style_pad_top(info_box, 10, 0);  // 顶部留一些间距
+    lv_obj_set_style_pad_row(info_box, 0, 0);  // 不需要间距，歌词会自动占据剩余空间
+    lv_obj_set_style_pad_top(info_box, 10, 0);  // 顶部留一点间距
     
-    // 创建歌名label（固定不动）
+    // 创建歌名label（顶部居中显示）
     song_title_label_ = lv_label_create(info_box);
-    lv_obj_set_width(song_title_label_, LV_PCT(90));  // 留一些边距
+    lv_obj_set_width(song_title_label_, LV_PCT(90));
     lv_obj_set_style_bg_opa(song_title_label_, LV_OPA_TRANSP, 0);
     lv_obj_set_style_pad_all(song_title_label_, 0, 0);
     lv_obj_set_style_text_align(song_title_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_long_mode(song_title_label_, LV_LABEL_LONG_DOT);  // 超长显示省略号，不滚动
+    lv_label_set_long_mode(song_title_label_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_opa(song_title_label_, LV_OPA_COVER, 0);  // 歌名完全不透明
+    lv_obj_clear_flag(song_title_label_, LV_OBJ_FLAG_FLEX_IN_NEW_TRACK);  // 确保在同一track
     
     if (theme_) {
         lv_obj_set_style_text_font(song_title_label_, theme_->text_font()->font(), 0);
@@ -263,22 +263,34 @@ void MusicPlayerUI::CreateSongInfoArea(int height, int padding) {
     }
     lv_label_set_text(song_title_label_, "音乐加载中...");
     
-    // 创建歌词label（可更新）
-    lyrics_label_ = lv_label_create(info_box);
-    lv_obj_set_width(lyrics_label_, LV_PCT(90));
+    // 创建歌词容器（占据剩余空间，用于让歌词垂直居中）
+    lv_obj_t* lyrics_container = lv_obj_create(info_box);
+    lv_obj_set_size(lyrics_container, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(lyrics_container, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_opa(lyrics_container, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_pad_all(lyrics_container, 0, 0);
+    lv_obj_clear_flag(lyrics_container, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_grow(lyrics_container, 1);  // 占据剩余所有空间
+    // 容器内部使用flex布局，让歌词居中
+    lv_obj_set_flex_flow(lyrics_container, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(lyrics_container, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    
+    // 在容器内创建歌词label（会自动垂直和水平居中）
+    lyrics_label_ = lv_label_create(lyrics_container);
+    lv_obj_set_width(lyrics_label_, LV_PCT(95));
     lv_obj_set_style_bg_opa(lyrics_label_, LV_OPA_TRANSP, 0);
     lv_obj_set_style_pad_all(lyrics_label_, 0, 0);
     lv_obj_set_style_text_align(lyrics_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_long_mode(lyrics_label_, LV_LABEL_LONG_WRAP);  // 歌词可以换行显示
+    lv_label_set_long_mode(lyrics_label_, LV_LABEL_LONG_WRAP);
     
     if (theme_) {
         lv_obj_set_style_text_font(lyrics_label_, theme_->text_font()->font(), 0);
         lv_obj_set_style_text_color(lyrics_label_, theme_->text_color(), 0);
-        lv_obj_set_style_text_opa(lyrics_label_, LV_OPA_70, 0);  // 歌词透明度稍低，区分歌名
+        lv_obj_set_style_text_opa(lyrics_label_, LV_OPA_80, 0);  // 歌词稍透明，区分歌名
     } else {
         lv_obj_set_style_text_font(lyrics_label_, LV_FONT_DEFAULT, 0);
         lv_obj_set_style_text_color(lyrics_label_, lv_color_hex(COLOR_TEXT_DEFAULT), 0);
-        lv_obj_set_style_text_opa(lyrics_label_, LV_OPA_70, 0);
+        lv_obj_set_style_text_opa(lyrics_label_, LV_OPA_80, 0);
     }
     lv_label_set_text(lyrics_label_, "");
 }
@@ -335,12 +347,12 @@ void MusicPlayerUI::CreateProgressBar(int height, int padding) {
     
     lv_obj_set_flex_flow(progress_container_, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(progress_container_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(progress_container_, padding / 2, 0);
+    lv_obj_set_style_pad_column(progress_container_, padding, 0);  // 增加列间距
     
     lv_color_t text_color = theme_ ? theme_->text_color() : lv_color_hex(COLOR_TEXT_DEFAULT);
     
     // 计算时间标签的固定宽度（足够容纳 "99:99" 格式）
-    int time_label_width = std::max(40, CalcPercent(width_, 10));  // 至少40px或10%宽度
+    int time_label_width = std::max(50, CalcPercent(width_, 12));  // 增加宽度确保显示完整
     
     // 当前时间 - 固定宽度，右对齐
     current_time_label_ = lv_label_create(progress_container_);
@@ -587,15 +599,17 @@ void MusicPlayerUI::UpdateTheme(LvglTheme* theme) {
     if (song_title_label_) {
         lv_obj_set_style_text_font(song_title_label_, theme_->text_font()->font(), 0);
         lv_obj_set_style_text_color(song_title_label_, theme_->text_color(), 0);
+        lv_obj_set_style_text_opa(song_title_label_, LV_OPA_COVER, 0);  // 歌名完全不透明
     }
     
     if (lyrics_label_) {
         lv_obj_set_style_text_font(lyrics_label_, theme_->text_font()->font(), 0);
         lv_obj_set_style_text_color(lyrics_label_, theme_->text_color(), 0);
-        lv_obj_set_style_text_opa(lyrics_label_, LV_OPA_70, 0);
+        lv_obj_set_style_text_opa(lyrics_label_, LV_OPA_80, 0);  // 歌词稍透明
     }
     
     if (music_icon_label_) {
+        lv_obj_set_style_text_font(music_icon_label_, GET_ICON_FONT(theme_), 0);
         lv_obj_set_style_text_color(music_icon_label_, theme_->text_color(), 0);
     }
     
@@ -613,10 +627,13 @@ void MusicPlayerUI::UpdateTheme(LvglTheme* theme) {
     
     if (volume_slider_) {
         lv_obj_set_style_bg_color(volume_slider_, GET_PROGRESS_BG_COLOR(theme_), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(volume_slider_, lv_color_black(), LV_PART_INDICATOR);  // 黑色
+        lv_obj_set_style_bg_color(volume_slider_, lv_color_black(), LV_PART_KNOB);  // 黑色
     }
     
     if (progress_bar_) {
         lv_obj_set_style_bg_color(progress_bar_, GET_PROGRESS_BG_COLOR(theme_), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(progress_bar_, GET_PRIMARY_COLOR(theme_), LV_PART_INDICATOR);
     }
     
     ESP_LOGI(TAG, "Theme updated");
