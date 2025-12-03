@@ -126,14 +126,6 @@ LcdDisplay::LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_
     std::string theme_name = settings.GetString("theme", "light");
     current_theme_ = LvglThemeManager::GetInstance().GetTheme(theme_name);
 
-    // 开机时检查一次时钟是否可用（SD卡和WiFi状态）
-    clock_available_ = CheckClockAvailability();
-    if (clock_available_) {
-        ESP_LOGI(TAG, "Clock face is available");
-    } else {
-        ESP_LOGI(TAG, "Clock face is not available (will use chat interface)");
-    }
-
     // Create a timer to hide the preview image
     esp_timer_create_args_t preview_timer_args = {
         .callback = [](void* arg) {
@@ -1251,6 +1243,96 @@ void LcdDisplay::SetTheme(Theme* theme) {
     Display::SetTheme(lvgl_theme);
 }
 
+// 🛠️ 提取：在聊天界面显示音乐信息
+void LcdDisplay::ShowMusicInfoInChat(const char* title, const char* artist, bool is_playing) {
+    if (is_playing && title && strlen(title) > 0) {
+        std::string display_text = title;
+        if (artist && strlen(artist) > 0) {
+            display_text += " - " + std::string(artist);
+        }
+        
+        if (chat_message_label_) {
+            lv_obj_remove_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
+            lv_label_set_text(chat_message_label_, display_text.c_str());
+            lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_WRAP);
+        }
+        
+        ESP_LOGI(TAG, "Set music info in chat: %s", display_text.c_str());
+    } else {
+        if (chat_message_label_) {
+            lv_obj_add_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
+            lv_label_set_text(chat_message_label_, "");
+        }
+        ESP_LOGI(TAG, "Cleared music info in chat");
+    }
+}
+
+// 🛠️ 提取：创建并设置音乐播放器UI
+void LcdDisplay::EnsureMusicPlayerUI() {
+    if (music_player_ui_) {
+        return;  // 已存在
+    }
+    
+    auto lvgl_theme = static_cast<LvglTheme*>(current_theme_);
+    if (!lvgl_theme) {
+        ESP_LOGE(TAG, "Theme is not initialized");
+        return;
+    }
+    
+    int status_bar_height = status_bar_ ? lv_obj_get_height(status_bar_) : 0;
+    music_player_ui_ = std::make_unique<MusicPlayerUI>(lv_screen_active(), width_, height_, lvgl_theme, status_bar_height);
+    
+    if (!music_player_ui_) {
+        ESP_LOGE(TAG, "Failed to create music player UI");
+        return;
+    }
+    
+    // 设置回调（只在创建时设置一次）
+    music_player_ui_->SetVolumeCallback([](int volume, void* user_data) {
+        auto& board = Board::GetInstance();
+        auto audio_codec = board.GetAudioCodec();
+        if (audio_codec) {
+            audio_codec->SetOutputVolume(volume);
+            ESP_LOGI("LcdDisplay", "Set audio codec volume to %d", volume);
+        }
+    }, nullptr);
+    
+    music_player_ui_->SetPlayPauseCallback([](void* user_data) {
+        auto& board = Board::GetInstance();
+        auto music = board.GetMusic();
+        if (music) {
+            auto esp32_music = dynamic_cast<Esp32Music*>(music);
+            if (esp32_music) {
+                if (esp32_music->IsPlaying() && !esp32_music->IsPaused()) {
+                    bool success = esp32_music->PauseStreaming();
+                    ESP_LOGI("LcdDisplay", "Music pause result: %s", success ? "success" : "failed");
+                    if (success) {
+                        auto display = board.GetDisplay();
+                        if (auto lcd_display = static_cast<LcdDisplay*>(display)) {
+                            if (lcd_display->music_player_ui_) {
+                                lcd_display->music_player_ui_->SetPlayState(MusicPlayerUI::PAUSED);
+                            }
+                        }
+                    }
+                } else if (esp32_music->IsPlaying() && esp32_music->IsPaused()) {
+                    bool success = esp32_music->ResumeStreaming();
+                    ESP_LOGI("LcdDisplay", "Music resume result: %s", success ? "success" : "failed");
+                    if (success) {
+                        auto display = board.GetDisplay();
+                        if (auto lcd_display = static_cast<LcdDisplay*>(display)) {
+                            if (lcd_display->music_player_ui_) {
+                                lcd_display->music_player_ui_->SetPlayState(MusicPlayerUI::PLAYING);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }, nullptr);
+    
+    ESP_LOGI(TAG, "Created music player UI with status_bar_height=%d", status_bar_height);
+}
+
 void LcdDisplay::UpdateMusicState(const char* title, const char* artist, bool is_playing) {
     bool request_show_clock = false;
     {
@@ -1258,57 +1340,13 @@ void LcdDisplay::UpdateMusicState(const char* title, const char* artist, bool is
     
     #if CONFIG_USE_WECHAT_MESSAGE_STYLE
         // 微信界面模式：始终在聊天界面显示音乐信息
-        if (is_playing && title && strlen(title) > 0) {
-            // 构建显示文本
-            std::string display_text = title;
-            if (artist && strlen(artist) > 0) {
-                display_text += " - " + std::string(artist);
-            }
-            
-            // 显示音乐信息（表情显示由 ApplyEmojiVisibility 统一控制）
-            if (chat_message_label_) {
-                lv_obj_remove_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
-                lv_label_set_text(chat_message_label_, display_text.c_str());
-                lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_WRAP);
-            }
-            
-            ESP_LOGI(TAG, "WeChat mode: Set music info: %s", display_text.c_str());
-        } else {
-            // 播放结束，清空音乐信息（表情显示由 ApplyEmojiVisibility 统一控制）
-            if (chat_message_label_) {
-                lv_obj_add_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
-                lv_label_set_text(chat_message_label_, "");
-            }
-            ESP_LOGI(TAG, "WeChat mode: Cleared music info");
-        }
-        // 表情显示由 ApplyEmojiVisibility 统一控制，这里不直接操作
+        ShowMusicInfoInChat(title, artist, is_playing);
         return;
     #endif
     
     // 默认界面模式：检查是否启用音乐播放器UI
     if (!IsMusicPlayerStyleEnabled()) {
-        // 未启用播放器UI，在聊天界面显示音乐信息
-        if (is_playing && title && strlen(title) > 0) {
-            std::string display_text = title;
-            if (artist && strlen(artist) > 0) {
-                display_text += " - " + std::string(artist);
-            }
-            
-            if (chat_message_label_) {
-                lv_obj_remove_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
-                lv_label_set_text(chat_message_label_, display_text.c_str());
-                lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_WRAP);
-            }
-            
-            ESP_LOGI(TAG, "Default mode: Set music info: %s", display_text.c_str());
-        } else {
-            if (chat_message_label_) {
-                lv_obj_add_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
-                lv_label_set_text(chat_message_label_, "");
-            }
-            ESP_LOGI(TAG, "Default mode: Cleared music info");
-        }
-        // 表情显示由 ApplyEmojiVisibility 统一控制
+        ShowMusicInfoInChat(title, artist, is_playing);
         return;
     }
     
@@ -1317,67 +1355,11 @@ void LcdDisplay::UpdateMusicState(const char* title, const char* artist, bool is
         ESP_LOGI(TAG, "Player UI mode: Setting music details: '%s' by '%s'", 
                  title, artist ? artist : "Unknown Artist");
         
-        // 确保音乐播放器UI存在
+        // 🛠️ 使用提取的函数创建UI（包含回调设置）
+        EnsureMusicPlayerUI();
         if (!music_player_ui_) {
-            auto lvgl_theme = static_cast<LvglTheme*>(current_theme_);
-            if (!lvgl_theme) {
-                ESP_LOGE(TAG, "Theme is not initialized");
-                return;
-            }
-            
-            // 获取状态栏的实际高度
-            int status_bar_height = status_bar_ ? lv_obj_get_height(status_bar_) : 0;
-            
-            music_player_ui_ = std::make_unique<MusicPlayerUI>(lv_screen_active(), width_, height_, lvgl_theme, status_bar_height);
-            if (!music_player_ui_) {
-                ESP_LOGE(TAG, "Failed to create music player UI");
-                return;
-            }
-            ESP_LOGI(TAG, "Created music player UI with status_bar_height=%d", status_bar_height);
+            return;  // 创建失败
         }
-
-        // 每次更新都设置回调，避免 UI 在其它路径创建时未设置回调
-        music_player_ui_->SetVolumeCallback([](int volume, void* user_data) {
-            auto& board = Board::GetInstance();
-            auto audio_codec = board.GetAudioCodec();
-            if (audio_codec) {
-                audio_codec->SetOutputVolume(volume);
-                ESP_LOGI("LcdDisplay", "Set audio codec volume to %d", volume);
-            }
-        }, nullptr);
-        
-        music_player_ui_->SetPlayPauseCallback([](void* user_data) {
-                auto& board = Board::GetInstance();
-                auto music = board.GetMusic();
-                if (music) {
-                    auto esp32_music = dynamic_cast<Esp32Music*>(music);
-                    if (esp32_music) {
-                        if (esp32_music->IsPlaying() && !esp32_music->IsPaused()) {
-                            bool success = esp32_music->PauseStreaming();
-                            ESP_LOGI("LcdDisplay", "Music pause result: %s", success ? "success" : "failed");
-                            if (success) {
-                                auto display = board.GetDisplay();
-                                if (auto lcd_display = static_cast<LcdDisplay*>(display)) {
-                                    if (lcd_display->music_player_ui_) {
-                                        lcd_display->music_player_ui_->SetPlayState(MusicPlayerUI::PAUSED);
-                                    }
-                                }
-                            }
-                        } else if (esp32_music->IsPlaying() && esp32_music->IsPaused()) {
-                            bool success = esp32_music->ResumeStreaming();
-                            ESP_LOGI("LcdDisplay", "Music resume result: %s", success ? "success" : "failed");
-                            if (success) {
-                                auto display = board.GetDisplay();
-                                if (auto lcd_display = static_cast<LcdDisplay*>(display)) {
-                                    if (lcd_display->music_player_ui_) {
-                                        lcd_display->music_player_ui_->SetPlayState(MusicPlayerUI::PLAYING);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }, nullptr);
         
         // 显示音乐播放器并更新信息
         music_player_ui_->Show();
@@ -1470,24 +1452,10 @@ void LcdDisplay::ShowMusicPlayer() {
         // 清理其他界面资源
         HideClockFace();
         
-        // 创建音乐播放器UI
+        // 🛠️ 使用提取的函数创建UI（包含回调设置）
+        EnsureMusicPlayerUI();
         if (!music_player_ui_) {
-            auto lvgl_theme = static_cast<LvglTheme*>(current_theme_);
-            if (!lvgl_theme) {
-                ESP_LOGE(TAG, "Theme is not initialized");
-                return;
-            }
-            
-            // 获取状态栏的实际高度
-            int status_bar_height = status_bar_ ? lv_obj_get_height(status_bar_) : 0;
-            
-            music_player_ui_ = std::make_unique<MusicPlayerUI>(lv_screen_active(), width_, height_, lvgl_theme, status_bar_height);
-            if (!music_player_ui_) {
-                ESP_LOGE(TAG, "Failed to create music player UI");
-                return;
-            }
-            
-            ESP_LOGI(TAG, "Created music player UI with status_bar_height=%d", status_bar_height);
+            return;  // 创建失败
         }
         
         // 显示播放器
@@ -1777,11 +1745,11 @@ void LcdDisplay::ShowChatInterface() {
     }
 }
 
-// 检查时钟可用性（仅开机时调用一次）
-bool LcdDisplay::CheckClockAvailability() const {
+// 检查是否可以显示时钟界面
+bool LcdDisplay::CanShowClockFace() const {
     // 检查SD卡
     if (!IsSdMounted()) {
-        ESP_LOGI(TAG, "Clock not available: SD card not mounted");
+        ESP_LOGI(TAG, "Cannot show clock: SD card not mounted");
         return false;
     }
     
@@ -1790,7 +1758,7 @@ bool LcdDisplay::CheckClockAvailability() const {
     if (board.GetBoardType() == "wifi" || board.GetBoardType() == "dual") {
         auto icon = board.GetNetworkStateIcon();
         if (icon && std::string(icon) == FONT_AWESOME_WIFI_SLASH) {
-            ESP_LOGI(TAG, "Clock not available: WiFi not connected");
+            ESP_LOGI(TAG, "Cannot show clock: WiFi not connected");
             return false;
         }
     }
@@ -1798,28 +1766,7 @@ bool LcdDisplay::CheckClockAvailability() const {
     return true;
 }
 
-// 检查是否可以显示时钟界面（使用缓存的结果）
-bool LcdDisplay::CanShowClockFace() const {
-    return clock_available_;
-}
-
-void LcdDisplay::UpdateMusicTime(const char* current_time, const char* duration) {
-    if (!music_player_ui_) {
-        return;
-    }
-    
-    if (!current_time || !duration) {
-        ESP_LOGW(TAG, "Invalid time parameters");
-        return;
-    }
-    
-    try {
-        music_player_ui_->SetCurrentTime(current_time);
-        music_player_ui_->SetDuration(duration);
-    } catch (const std::exception& e) {
-        ESP_LOGE(TAG, "Error updating music time: %s", e.what());
-    }
-}
+// ✅ 已删除 UpdateMusicTime()：进度更新已由 StartMusicProgressUpdate() 定时器接管
 
 // 统一接口：设置歌曲标题、歌手与播放状态
 void LcdDisplay::SetMusicDetails(const char* song_title, const char* artist, bool is_playing) {

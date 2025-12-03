@@ -24,9 +24,9 @@ static const char* TAG = "MusicPlayerUI";
 // 响应式布局参数 - 使用百分比和比例
 #define LAYOUT_PADDING_PERCENT      3      // 外边距占屏幕宽度的3%
 #define VOLUME_HEIGHT_PERCENT       8      // 音量区域占屏幕高度的8%
-#define CONTROL_HEIGHT_PERCENT      15     // 控制按钮区域占屏幕高度的15%
+#define CONTROL_HEIGHT_PERCENT      12     // 控制按钮区域占屏幕高度的12%
 #define PROGRESS_HEIGHT_PERCENT     10     // 进度条区域占屏幕高度的10%
-#define MIN_COMPONENT_HEIGHT        30     // 最小组件高度（像素）
+#define MIN_COMPONENT_HEIGHT        20     // 最小组件高度（像素）
 #define MAX_COMPONENT_HEIGHT        80     // 最大组件高度（像素）
 
 // 字体和颜色获取宏
@@ -181,38 +181,32 @@ void MusicPlayerUI::CreateVolumeControl(int height, int padding) {
     lv_obj_set_style_text_color(music_icon_label_, GET_TEXT_COLOR(theme_), 0);
     lv_obj_set_style_text_align(music_icon_label_, LV_TEXT_ALIGN_RIGHT, 0);
     
-    // 音量滑块 - 宽度与进度条一致，高度需要容纳更大的滑块
+    // 音量滑块 - 与时间进度条保持一致的样式
     volume_slider_ = lv_slider_create(volume_container_);
     int slider_width = std::max(80, width_ - (label_width * 2) - (padding * 3));  // 和进度条相同的计算方式
-    int bar_height = height * 0.4;
-    int knob_size = bar_height * 1.8;  // 滑块是进度条的1.8倍
-    lv_obj_set_size(volume_slider_, slider_width, knob_size);  // 高度设置为滑块大小，避免裁剪
+    int bar_height = height * 0.4;  // 与时间进度条相同的高度
+    lv_obj_set_size(volume_slider_, slider_width, bar_height);
     lv_slider_set_range(volume_slider_, 0, 100);
     lv_slider_set_value(volume_slider_, current_volume_, LV_ANIM_OFF);
     
-    lv_color_t progress_bg = GET_PROGRESS_BG_COLOR(theme_);
-    lv_obj_set_style_bg_color(volume_slider_, progress_bg, LV_PART_MAIN);
+    // 背景样式 - 与时间进度条一致
+    lv_obj_set_style_bg_color(volume_slider_, GET_PROGRESS_BG_COLOR(theme_), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(volume_slider_, LV_OPA_COVER, LV_PART_MAIN);
-    // 🔧 设置MAIN部分（进度条背景）的高度
-    lv_obj_set_style_height(volume_slider_, bar_height, LV_PART_MAIN);
-    lv_obj_set_style_pad_left(volume_slider_, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_right(volume_slider_, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(volume_slider_, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(volume_slider_, 0, LV_PART_MAIN);
     
-    // 🎨 音量进度条使用黑色，与时间进度条区分
-    lv_obj_set_style_bg_color(volume_slider_, lv_color_black(), LV_PART_INDICATOR);  // 黑色
+    // 进度指示器样式 - 使用主题颜色，与时间进度条一致
+    lv_obj_set_style_bg_color(volume_slider_, GET_PRIMARY_COLOR(theme_), LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(volume_slider_, LV_OPA_COVER, LV_PART_INDICATOR);
-    lv_obj_set_style_height(volume_slider_, bar_height, LV_PART_INDICATOR);  // 进度条高度
-    // 🔧 确保indicator部分也无padding，与main完全对齐
-    lv_obj_set_style_pad_left(volume_slider_, 0, LV_PART_INDICATOR);
-    lv_obj_set_style_pad_right(volume_slider_, 0, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(volume_slider_, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
+    lv_obj_set_style_pad_all(volume_slider_, 0, LV_PART_INDICATOR);
     
-    // 🎚️ 滑块样式 - 黑色圆形滑块，比进度条大1.8倍
-    lv_obj_set_style_width(volume_slider_, knob_size, LV_PART_KNOB);
-    lv_obj_set_style_height(volume_slider_, knob_size, LV_PART_KNOB);
-    lv_obj_set_style_bg_color(volume_slider_, lv_color_black(), LV_PART_KNOB);  // 黑色
-    lv_obj_set_style_bg_opa(volume_slider_, LV_OPA_COVER, LV_PART_KNOB);
+    // 隐藏滑块按钮，使其看起来像进度条
+    lv_obj_set_style_bg_opa(volume_slider_, LV_OPA_TRANSP, LV_PART_KNOB);
+    lv_obj_set_style_border_opa(volume_slider_, LV_OPA_TRANSP, LV_PART_KNOB);
     lv_obj_set_style_pad_all(volume_slider_, 0, LV_PART_KNOB);
-    lv_obj_set_style_radius(volume_slider_, LV_RADIUS_CIRCLE, LV_PART_KNOB);
+    lv_obj_set_style_width(volume_slider_, 0, LV_PART_KNOB);
+    lv_obj_set_style_height(volume_slider_, 0, LV_PART_KNOB);
     
     lv_obj_add_event_cb(volume_slider_, VolumeEventCb, LV_EVENT_VALUE_CHANGED, this);
     
@@ -627,8 +621,7 @@ void MusicPlayerUI::UpdateTheme(LvglTheme* theme) {
     
     if (volume_slider_) {
         lv_obj_set_style_bg_color(volume_slider_, GET_PROGRESS_BG_COLOR(theme_), LV_PART_MAIN);
-        lv_obj_set_style_bg_color(volume_slider_, lv_color_black(), LV_PART_INDICATOR);  // 黑色
-        lv_obj_set_style_bg_color(volume_slider_, lv_color_black(), LV_PART_KNOB);  // 黑色
+        lv_obj_set_style_bg_color(volume_slider_, GET_PRIMARY_COLOR(theme_), LV_PART_INDICATOR);
     }
     
     if (progress_bar_) {
