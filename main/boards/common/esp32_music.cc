@@ -273,8 +273,8 @@ bool Esp32Music::Download(const std::string& song_name, const std::string& artis
     ESP_LOGI(TAG, "Voice processing disabled before HTTP request to prevent AFE warnings");
     vTaskDelay(pdMS_TO_TICKS(50)); // 等待语音链路停止
     
-    // 第一步：请求stream_pcm接口获取音频信息
-    std::string base_url = "http://110.42.59.54:2233"; //http://http-embedded-music.miao-lab.top:2233
+    // 第一步：请求stream_pcm接口获取音频信息http://110.42.59.54:2233、http://http-embedded-music.miao-lab.top:2233
+    std::string base_url = "http://110.42.59.54:2233"; 
     std::string full_url = base_url + "/stream_pcm?song=" + url_encode(song_name) + "&artist=" + url_encode(artist_name);
     
     ESP_LOGI(TAG, "Request URL: %s", full_url.c_str());

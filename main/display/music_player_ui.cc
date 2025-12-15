@@ -27,7 +27,7 @@ static const char* TAG = "MusicPlayerUI";
 #define CONTROL_HEIGHT_PERCENT      12     // 控制按钮区域占屏幕高度的12%
 #define PROGRESS_HEIGHT_PERCENT     10     // 进度条区域占屏幕高度的10%
 #define MIN_COMPONENT_HEIGHT        20     // 最小组件高度（像素）
-#define MAX_COMPONENT_HEIGHT        80     // 最大组件高度（像素）
+#define MAX_COMPONENT_HEIGHT        100    // 最大组件高度（像素）
 
 // 字体和颜色获取宏
 #define GET_DEFAULT_FONT()      LV_FONT_DEFAULT
@@ -107,14 +107,25 @@ void MusicPlayerUI::CreateUI() {
     // 调整可用高度，扣除状态栏
     int available_height = height_ - status_bar_height;
     
+    // 判断屏幕方向：竖屏(height > width)或横屏(width >= height)
+    bool is_portrait = height_ > width_;
+    
     int volume_height = ClampSize(CalcPercent(available_height, VOLUME_HEIGHT_PERCENT), MIN_COMPONENT_HEIGHT, MAX_COMPONENT_HEIGHT);
     int control_height = ClampSize(CalcPercent(available_height, CONTROL_HEIGHT_PERCENT), MIN_COMPONENT_HEIGHT * 2, MAX_COMPONENT_HEIGHT * 2);
     int progress_height = ClampSize(CalcPercent(available_height, PROGRESS_HEIGHT_PERCENT), MIN_COMPONENT_HEIGHT, MAX_COMPONENT_HEIGHT);
     int element_spacing = std::max(2, padding / 3);
     
-    // 计算歌曲信息区域的剩余高度
+    // 根据屏幕方向调整歌曲信息区域的高度
     int reserved_height = volume_height + control_height + progress_height + (padding * 2) + (element_spacing * 3);
-    int song_info_height = std::max(60, available_height - reserved_height);
+    int song_info_height;
+    if (is_portrait) {
+        // 竖屏：歌曲信息区域占剩余空间的80%，让播放控件往上移
+        int remaining_space = available_height - reserved_height;
+        song_info_height = std::max(50, CalcPercent(remaining_space, 80));
+    } else {
+        // 横屏：歌曲信息区域占剩余空间的100%，能显示更多歌词
+        song_info_height = std::max(60, available_height - reserved_height);
+    }
     
     ESP_LOGI(TAG, "Layout: status_bar=%d, padding=%d, volume=%d, control=%d, progress=%d, song_info=%d", 
              status_bar_height, padding, volume_height, control_height, progress_height, song_info_height);
@@ -139,11 +150,14 @@ void MusicPlayerUI::CreateUI() {
     lv_obj_set_scrollbar_mode(container_, LV_SCROLLBAR_MODE_OFF);
     
     lv_obj_set_flex_flow(container_, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(container_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(container_, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(container_, element_spacing, 0);
     
+    // 计算统一的进度条高度（音量滑块和时间进度条使用相同高度）
+    int unified_bar_height = std::max(8, CalcPercent(progress_height, 40));
+    
     // 1. 音量控制区域
-    CreateVolumeControl(volume_height, padding);
+    CreateVolumeControl(volume_height, padding, unified_bar_height);
     
     // 2. 歌曲信息区域
     CreateSongInfoArea(song_info_height, padding);
@@ -151,13 +165,13 @@ void MusicPlayerUI::CreateUI() {
     // 3. 控制按钮区域
     CreateControlButtons(control_height, padding);
     
-    // 4. 进度条区域
+    // 4. 时间进度条区域 - 始终在最底部
     CreateProgressBar(progress_height, padding);
     
     ESP_LOGI(TAG, "Responsive UI created successfully");
 }
 
-void MusicPlayerUI::CreateVolumeControl(int height, int padding) {
+void MusicPlayerUI::CreateVolumeControl(int height, int padding, int progress_bar_height) {
     volume_container_ = lv_obj_create(container_);
     lv_obj_add_flag(volume_container_, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_set_size(volume_container_, LV_PCT(100), height);
@@ -171,7 +185,7 @@ void MusicPlayerUI::CreateVolumeControl(int height, int padding) {
     lv_obj_set_style_pad_column(volume_container_, padding, 0);  // 增加列间距
     
     // 计算标签固定宽度（和进度条区域的时间标签保持一致）
-    int label_width = std::max(40, CalcPercent(width_, 10));
+    int label_width = std::max(50, CalcPercent(width_, 12));
     
     // 音量图标 - 固定宽度，右对齐
     music_icon_label_ = lv_label_create(volume_container_);
@@ -181,34 +195,56 @@ void MusicPlayerUI::CreateVolumeControl(int height, int padding) {
     lv_obj_set_style_text_color(music_icon_label_, GET_TEXT_COLOR(theme_), 0);
     lv_obj_set_style_text_align(music_icon_label_, LV_TEXT_ALIGN_RIGHT, 0);
     
-    // 音量滑块 - 与时间进度条保持一致的样式
+    // 音量滑块 - 与进度条相同的可视高度，但扩大触摸区域
     volume_slider_ = lv_slider_create(volume_container_);
     int slider_width = std::max(80, width_ - (label_width * 2) - (padding * 3));  // 和进度条相同的计算方式
-    int bar_height = height * 0.4;  // 与时间进度条相同的高度
-    lv_obj_set_size(volume_slider_, slider_width, bar_height);
+    // 使用传入的统一高度，确保与时间进度条粗细完全一致
+    lv_obj_set_size(volume_slider_, slider_width, progress_bar_height);
+    
+    // 扩展触摸区域，使整个进度条区域都可以响应触摸
+    lv_obj_set_ext_click_area(volume_slider_, 30);  // 在四周扩展30像素的触摸区域
+    
+    // 设置滑块模式：允许点击跳转和拖动
+    lv_slider_set_mode(volume_slider_, LV_SLIDER_MODE_NORMAL);  // 普通模式，支持点击和拖动
     lv_slider_set_range(volume_slider_, 0, 100);
     lv_slider_set_value(volume_slider_, current_volume_, LV_ANIM_OFF);
+    
+    // 关键设置：让整个滑块区域都可以响应触摸
+    lv_obj_clear_flag(volume_slider_, LV_OBJ_FLAG_ADV_HITTEST);  // 整个区域可点击，不只是按钮
+    lv_obj_add_flag(volume_slider_, LV_OBJ_FLAG_CLICKABLE);      // 确保可点击
+    lv_obj_add_flag(volume_slider_, LV_OBJ_FLAG_CLICK_FOCUSABLE); // 允许通过点击获得焦点
+    lv_obj_clear_flag(volume_slider_, LV_OBJ_FLAG_SCROLL_ON_FOCUS); // 禁止滚动干扰
     
     // 背景样式 - 与时间进度条一致
     lv_obj_set_style_bg_color(volume_slider_, GET_PROGRESS_BG_COLOR(theme_), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(volume_slider_, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_radius(volume_slider_, LV_RADIUS_CIRCLE, LV_PART_MAIN);
     lv_obj_set_style_pad_all(volume_slider_, 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(volume_slider_, 0, LV_PART_MAIN);  // 移除阴影
     
     // 进度指示器样式 - 使用主题颜色，与时间进度条一致
     lv_obj_set_style_bg_color(volume_slider_, GET_PRIMARY_COLOR(theme_), LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(volume_slider_, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_radius(volume_slider_, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
     lv_obj_set_style_pad_all(volume_slider_, 0, LV_PART_INDICATOR);
+    lv_obj_set_style_shadow_width(volume_slider_, 0, LV_PART_INDICATOR);  // 移除阴影
     
-    // 隐藏滑块按钮，使其看起来像进度条
-    lv_obj_set_style_bg_opa(volume_slider_, LV_OPA_TRANSP, LV_PART_KNOB);
-    lv_obj_set_style_border_opa(volume_slider_, LV_OPA_TRANSP, LV_PART_KNOB);
-    lv_obj_set_style_pad_all(volume_slider_, 0, LV_PART_KNOB);
-    lv_obj_set_style_width(volume_slider_, 0, LV_PART_KNOB);
-    lv_obj_set_style_height(volume_slider_, 0, LV_PART_KNOB);
+    // 显示一个小的滑块按钮，便于用户看到当前位置和拖动
+    lv_obj_set_style_bg_color(volume_slider_, GET_PRIMARY_COLOR(theme_), LV_PART_KNOB);
+    lv_obj_set_style_bg_opa(volume_slider_, LV_OPA_COVER, LV_PART_KNOB);
+    lv_obj_set_style_border_width(volume_slider_, 0, LV_PART_KNOB);  // 移除描边
+    lv_obj_set_style_shadow_width(volume_slider_, 0, LV_PART_KNOB);  // 移除阴影
+    lv_obj_set_style_pad_all(volume_slider_, 2, LV_PART_KNOB);  // 按钮padding
+    int knob_size = std::max(14, progress_bar_height + 2);  // 按钮稍大于滑块，最小14像素
+    lv_obj_set_style_width(volume_slider_, knob_size, LV_PART_KNOB);
+    lv_obj_set_style_height(volume_slider_, knob_size, LV_PART_KNOB);
+    lv_obj_set_style_radius(volume_slider_, LV_RADIUS_CIRCLE, LV_PART_KNOB);
     
+    // 监听多种事件，提高触摸响应性
     lv_obj_add_event_cb(volume_slider_, VolumeEventCb, LV_EVENT_VALUE_CHANGED, this);
+    lv_obj_add_event_cb(volume_slider_, VolumeEventCb, LV_EVENT_PRESSED, this);
+    lv_obj_add_event_cb(volume_slider_, VolumeEventCb, LV_EVENT_PRESSING, this);
+    lv_obj_add_event_cb(volume_slider_, VolumeEventCb, LV_EVENT_RELEASED, this);
     
     // 音量数值 - 固定宽度，左对齐
     volume_label_ = lv_label_create(volume_container_);
@@ -572,16 +608,39 @@ void MusicPlayerUI::ProgressEventCb(lv_event_t* e) {
 
 void MusicPlayerUI::VolumeEventCb(lv_event_t* e) {
     MusicPlayerUI* ui = static_cast<MusicPlayerUI*>(lv_event_get_user_data(e));
-    if (ui && ui->volume_callback_) {
-        lv_obj_t* slider = static_cast<lv_obj_t*>(lv_event_get_target(e));
-        int volume = lv_slider_get_value(slider);
-        ui->current_volume_ = volume;
+    if (!ui) return;
+    
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_obj_t* slider = static_cast<lv_obj_t*>(lv_event_get_target(e));
+    int volume = lv_slider_get_value(slider);
+    
+    // 触摸开始时唤醒一次（避免频繁唤醒）
+    static bool touch_active = false;
+    if (code == LV_EVENT_PRESSED) {
+        touch_active = true;
+        Board::GetInstance().SetPowerSaveMode(false);
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        touch_active = false;
+    }
+    
+    // 处理音量变化
+    if (code == LV_EVENT_VALUE_CHANGED || code == LV_EVENT_PRESSING || 
+        code == LV_EVENT_PRESSED || code == LV_EVENT_RELEASED) {
         
-        if (ui->volume_label_) {
-            lv_label_set_text_fmt(ui->volume_label_, "%d", volume);
+        // 只有音量真正改变时才更新
+        if (volume != ui->current_volume_) {
+            ui->current_volume_ = volume;
+            
+            // 更新显示
+            if (ui->volume_label_) {
+                lv_label_set_text_fmt(ui->volume_label_, "%d", volume);
+            }
+            
+            // 触发回调
+            if (ui->volume_callback_) {
+                ui->volume_callback_(volume, ui->volume_user_data_);
+            }
         }
-        
-        ui->volume_callback_(volume, ui->volume_user_data_);
     }
 }
 

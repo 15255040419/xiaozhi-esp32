@@ -99,7 +99,7 @@ private:
     // 内部方法
     void CreateUI();
     void DestroyUI();
-    void CreateVolumeControl(int height, int padding);
+    void CreateVolumeControl(int height, int padding, int progress_bar_height);
     void CreateSongInfoArea(int height, int padding);
     void CreateControlButtons(int height, int padding);
     void CreateProgressBar(int height, int padding);

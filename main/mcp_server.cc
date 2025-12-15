@@ -4,6 +4,7 @@
  */
 
 #include "mcp_server.h"
+#include "system_info.h"
 #include <esp_log.h>
 #include <esp_app_desc.h>
 #include <algorithm>
@@ -51,6 +52,13 @@ void McpServer::AddCommonTools() {
         PropertyList(),
         [&board](const PropertyList& properties) -> ReturnValue {
             return board.GetDeviceStatusJson();
+        });
+
+    AddTool("self.get_device_mac_address",
+        "Get the MAC address of the device. Use this tool when the user asks for the MAC address or device ID for binding.",
+        PropertyList(),
+        [](const PropertyList& properties) -> ReturnValue {
+            return SystemInfo::GetMacAddress();
         });
     
     AddTool("self.search_music",
